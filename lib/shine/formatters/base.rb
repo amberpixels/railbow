@@ -7,19 +7,19 @@ module Shine
   module Formatters
     class Base
       RESET = "\e[0m"
-      BOLD  = "\e[1m"
+      BOLD = "\e[1m"
       GREEN = "\e[32m"
       YELLOW = "\e[33m"
-      RED   = "\e[31m"
-      CYAN  = "\e[36m"
+      RED = "\e[31m"
+      CYAN = "\e[36m"
       BG_PURPLE = "\e[48;5;99m"
       WHITE = "\e[97m"
 
-      def green(str)  = "#{GREEN}#{str}#{RESET}"
+      def green(str) = "#{GREEN}#{str}#{RESET}"
       def yellow(str) = "#{YELLOW}#{str}#{RESET}"
-      def red(str)    = "#{RED}#{str}#{RESET}"
-      def cyan(str)   = "#{CYAN}#{str}#{RESET}"
-      def bold(str)   = "#{BOLD}#{str}#{RESET}"
+      def red(str) = "#{RED}#{str}#{RESET}"
+      def cyan(str) = "#{CYAN}#{str}#{RESET}"
+      def bold(str) = "#{BOLD}#{str}#{RESET}"
       def green_bold(str) = "#{GREEN}#{BOLD}#{str}#{RESET}"
       def yellow_bold(str) = "#{YELLOW}#{BOLD}#{str}#{RESET}"
 
@@ -38,11 +38,11 @@ module Shine
       def emoji(type)
         case type
         when :migrating then "🚀"
-        when :migrated  then "✅"
+        when :migrated then "✅"
         when :reverting then "⏪"
-        when :reverted  then "✅"
-        when :check     then "✓"
-        when :status    then "📊"
+        when :reverted then "✅"
+        when :check then "✓"
+        when :status then "📊"
         else ""
         end
       end
@@ -100,7 +100,7 @@ module Shine
         fmt_header = ->(row) {
           row.each_with_index.map { |cell, i|
             s = cell.to_s
-            padding = i == last ? "" : " " * (col_widths[i] - display_width(strip_ansi(s)))
+            padding = (i == last) ? "" : " " * (col_widths[i] - display_width(strip_ansi(s)))
             " #{BG_PURPLE}#{BOLD}#{WHITE}#{s}#{padding}#{RESET} "
           }.join(" ")
         }
@@ -116,7 +116,7 @@ module Shine
       def terminal_width
         return $stdout.winsize[1] if $stdout.respond_to?(:winsize) && $stdout.tty?
         nil
-      rescue StandardError
+      rescue
         nil
       end
 

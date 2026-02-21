@@ -27,7 +27,7 @@ module Shine
       header = ["Status", "Migration ID", "Created At", "Migration Name"]
       rows = db_list.map do |status, version, name|
         colored_status = case status
-        when "up"   then formatter.green_bold("up")
+        when "up" then formatter.green_bold("up")
         when "down" then formatter.yellow_bold("down")
         else status
         end
