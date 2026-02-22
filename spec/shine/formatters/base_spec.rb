@@ -51,6 +51,23 @@ RSpec.describe Shine::Formatters::Base do
     end
   end
 
+  describe "#truncate_str (private)" do
+    it "returns string as-is when within max width" do
+      expect(formatter.send(:truncate_str, "short", 10)).to eq("short")
+    end
+
+    it "truncates with ellipsis when exceeding max width" do
+      result = formatter.send(:truncate_str, "Add visits per week to cost estimator insurances", 20)
+      expect(result).to end_with("...")
+      expect(result.length).to be <= 20
+    end
+
+    it "handles ANSI content by measuring plain text" do
+      colored = "\e[32mshort\e[0m"
+      expect(formatter.send(:truncate_str, colored, 10)).to eq(colored)
+    end
+  end
+
   describe "#render_table" do
     it "renders a table with styled header and data rows" do
       header = ["Name", "Value"]
@@ -85,6 +102,16 @@ RSpec.describe Shine::Formatters::Base do
       expect(lines[2]).to include("─")
     end
 
+    it "truncates columns specified in truncate_cols" do
+      header = ["Name", "Description", "Tags"]
+      rows = [["foo", "A very long description that should be truncated", "tag1"]]
+      result = formatter.render_table(header, rows, truncate_cols: {1 => 15})
+      lines = result.split("\n")
+
+      expect(lines[1]).to include("...")
+      expect(lines[1]).not_to include("truncated")
+    end
+
     it "handles ANSI-colored content for width calculation" do
       header = ["Status", "Name"]
       rows = [[formatter.green("up"), "test"]]
@@ -103,6 +130,44 @@ RSpec.describe Shine::Formatters::Base do
       expect(formatter.red("hi")).to eq("\e[31mhi\e[0m")
       expect(formatter.cyan("hi")).to eq("\e[36mhi\e[0m")
       expect(formatter.bold("hi")).to eq("\e[1mhi\e[0m")
+    end
+  end
+
+  describe "#table_color" do
+    it "returns a deterministic color code for a table name" do
+      color1 = formatter.table_color("products")
+      color2 = formatter.table_color("products")
+      expect(color1).to eq(color2)
+    end
+
+    it "returns a value from TABLE_PALETTE" do
+      color = formatter.table_color("users")
+      expect(Shine::Formatters::Base::TABLE_PALETTE).to include(color)
+    end
+  end
+
+  describe "#table_tag" do
+    it "returns a colored bullet with table name" do
+      tag = formatter.table_tag("products")
+      expect(tag).to include("● products")
+      expect(tag).to match(/\e\[38;5;\d+m/)
+      expect(tag).to end_with("\e[0m")
+    end
+  end
+
+  describe "#table_tags" do
+    it "returns empty string for nil" do
+      expect(formatter.table_tags(nil)).to eq("")
+    end
+
+    it "returns empty string for empty array" do
+      expect(formatter.table_tags([])).to eq("")
+    end
+
+    it "joins multiple tags with spaces" do
+      result = formatter.table_tags(["products", "users"])
+      expect(result).to include("● products")
+      expect(result).to include("● users")
     end
   end
 end
