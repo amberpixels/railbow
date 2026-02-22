@@ -3,7 +3,7 @@
 require "spec_helper"
 require "tempfile"
 
-RSpec.describe Shine::MigrationParser do
+RSpec.describe Railbow::MigrationParser do
   def write_migration(content)
     file = Tempfile.new(["migration", ".rb"])
     file.write(content)

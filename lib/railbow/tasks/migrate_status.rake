@@ -4,10 +4,11 @@ require "date"
 require "open3"
 require_relative "../formatters/base"
 require_relative "../migration_parser"
+require_relative "../logo"
 
 # Override DatabaseTasks.migrate_status which is called by both
 # db:migrate:status and db:migrate:status:<database_name> tasks.
-module Shine
+module Railbow
   module MigrateStatusFormatter
     private
 
@@ -62,9 +63,10 @@ module Shine
     end
 
     def print_help
+      Railbow.print_logo
       puts <<~HELP
 
-        \e[1mShine\e[0m — Enhanced db:migrate:status
+        Enhanced db:migrate:status
 
         \e[1mUsage:\e[0m
           rake db:migrate:status [ENV_VAR=value ...]
@@ -107,7 +109,7 @@ module Shine
         Kernel.abort "Schema migrations table does not exist yet."
       end
 
-      formatter = Shine::Formatters::Base.new
+      formatter = Railbow::Formatters::Base.new
 
       db_name = migration_connection_pool.db_config.database
       puts "\n#{formatter.emoji(:status)} Database: #{formatter.cyan(db_name)}"
@@ -202,7 +204,7 @@ module Shine
         end
 
         if tables_enabled
-          tables = Shine::MigrationParser.extract_tables(version_to_file[version.to_s])
+          tables = Railbow::MigrationParser.extract_tables(version_to_file[version.to_s])
           row << formatter.table_tags(tables)
         end
 
@@ -237,4 +239,4 @@ module Shine
   end
 end
 
-ActiveRecord::Tasks::DatabaseTasks.prepend(Shine::MigrateStatusFormatter)
+ActiveRecord::Tasks::DatabaseTasks.prepend(Railbow::MigrateStatusFormatter)

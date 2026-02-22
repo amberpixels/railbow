@@ -1,22 +1,22 @@
 # frozen_string_literal: true
 
-require_relative "lib/shine/version"
+require_relative "lib/railbow/version"
 
 Gem::Specification.new do |spec|
-  spec.name = "shine"
-  spec.version = Shine::VERSION
+  spec.name = "railbow"
+  spec.version = Railbow::VERSION
   spec.authors = ["Eugene M"]
   spec.email = ["eugene@amberpixels.io"]
 
   spec.summary = "Enhance Rails migration output with modern, colorful, emoji-enhanced formatting"
-  spec.description = "Shine makes Rails database migrations beautiful with colorful output, emojis, and readable millisecond timing"
-  spec.homepage = "https://github.com/amberpixels/shine"
+  spec.description = "Railbow makes Rails database migrations beautiful with colorful output, emojis, and readable millisecond timing"
+  spec.homepage = "https://github.com/amberpixels/railbow"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = "https://github.com/amberpixels/shine"
-  spec.metadata["changelog_uri"] = "https://github.com/amberpixels/shine/blob/main/CHANGELOG.md"
+  spec.metadata["source_code_uri"] = "https://github.com/amberpixels/railbow"
+  spec.metadata["changelog_uri"] = "https://github.com/amberpixels/railbow/blob/main/CHANGELOG.md"
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.

@@ -2,7 +2,7 @@
 
 require_relative "formatters/base"
 
-module Shine
+module Railbow
   module MigrationFormatter
     FORMATTER = Formatters::Base.new.freeze
 
