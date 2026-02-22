@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Shine
+module Railbow
   class MigrationParser
     # Methods that take a single table name as the first argument
     SINGLE_TABLE_METHODS = %w[

@@ -2,7 +2,7 @@
 
 source "https://rubygems.org"
 
-# Specify your gem's dependencies in shine.gemspec
+# Specify your gem's dependencies in railbow.gemspec
 gemspec
 
 gem "irb"

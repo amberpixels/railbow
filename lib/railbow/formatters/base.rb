@@ -4,7 +4,7 @@ require "io/console"
 require "unicode/display_width"
 require "zlib"
 
-module Shine
+module Railbow
   module Formatters
     class Base
       RESET = "\e[0m"

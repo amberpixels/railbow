@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require "shine"
-require "shine/formatters/base"
-require "shine/migration_formatter"
-require "shine/migration_parser"
+require "railbow"
+require "railbow/formatters/base"
+require "railbow/migration_formatter"
+require "railbow/migration_parser"
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|

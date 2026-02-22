@@ -12,10 +12,10 @@ unless String.method_defined?(:demodulize)
   end
 end
 
-RSpec.describe Shine::MigrationFormatter do
+RSpec.describe Railbow::MigrationFormatter do
   let(:migration_class) do
     klass = Class.new do
-      include Shine::MigrationFormatter
+      include Railbow::MigrationFormatter
 
       attr_reader :output
 

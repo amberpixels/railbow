@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe Shine::Formatters::Base do
+RSpec.describe Railbow::Formatters::Base do
   subject(:formatter) { described_class.new }
 
   describe "#format_timing" do
@@ -142,7 +142,7 @@ RSpec.describe Shine::Formatters::Base do
 
     it "returns a value from TABLE_PALETTE" do
       color = formatter.table_color("users")
-      expect(Shine::Formatters::Base::TABLE_PALETTE).to include(color)
+      expect(Railbow::Formatters::Base::TABLE_PALETTE).to include(color)
     end
   end
 

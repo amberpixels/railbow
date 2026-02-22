@@ -1,6 +1,12 @@
-# Shine ✨
+# Railbow
 
-Make your Rails database migrations beautiful! Shine enhances Rails migration command output with modern, colorful, emoji-enhanced formatting.
+```
+ ░█▀▀█ ░█▀▀█ ▀█▀ ░█─── ░█▀▀█ ░█▀▀▀█ ░█───░█
+ ░█▄▄▀ ░█▄▄█ ░█─ ░█─── ░█▀▀▄ ░█──░█ ░█─█─░█
+ ░█─░█ ░█─░█ ▄█▄ ░█▄▄█ ░█▄▄█ ░█▄▄▄█ ─░█░█─
+```
+
+Make your Rails database migrations beautiful! Railbow enhances Rails migration command output with modern, colorful, emoji-enhanced formatting.
 
 ## Features
 
@@ -15,7 +21,7 @@ Make your Rails database migrations beautiful! Shine enhances Rails migration co
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'shine'
+gem 'railbow'
 ```
 
 Then execute:
@@ -28,7 +34,7 @@ That's it! No configuration needed. Your migrations will now look beautiful.
 
 ## Usage
 
-Shine automatically enhances these Rails commands:
+Railbow automatically enhances these Rails commands:
 
 ### `rails db:migrate`
 
@@ -87,7 +93,7 @@ down     20160213170731  Create owners
 
 ## How It Works
 
-Shine integrates seamlessly with Rails through a Railtie. It:
+Railbow integrates seamlessly with Rails through a Railtie. It:
 
 1. Prepends formatting methods to `ActiveRecord::Migration`
 2. Overrides the `db:migrate:status` Rake task
@@ -110,7 +116,7 @@ To install this gem onto your local machine, run `bundle exec rake install`.
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/amberpixels/shine. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/amberpixels/shine/blob/main/CODE_OF_CONDUCT.md).
+Bug reports and pull requests are welcome on GitHub at https://github.com/amberpixels/railbow. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/amberpixels/railbow/blob/main/CODE_OF_CONDUCT.md).
 
 ## License
 
@@ -118,4 +124,4 @@ The gem is available as open source under the terms of the [MIT License](https:/
 
 ## Code of Conduct
 
-Everyone interacting in the Shine project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/amberpixels/shine/blob/main/CODE_OF_CONDUCT.md).
+Everyone interacting in the Railbow project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/amberpixels/railbow/blob/main/CODE_OF_CONDUCT.md).
