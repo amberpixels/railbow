@@ -3,6 +3,7 @@
 require "shine"
 require "shine/formatters/base"
 require "shine/migration_formatter"
+require "shine/migration_parser"
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|
