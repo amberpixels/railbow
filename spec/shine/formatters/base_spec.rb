@@ -64,6 +64,27 @@ RSpec.describe Shine::Formatters::Base do
       expect(lines.length).to eq(3) # header + 2 rows
     end
 
+    it "renders identically with empty separators hash" do
+      header = ["Name", "Value"]
+      rows = [["foo", "bar"], ["baz", "qux"]]
+      without = formatter.render_table(header, rows)
+      with_empty = formatter.render_table(header, rows, separators: {})
+      expect(with_empty).to eq(without)
+    end
+
+    it "inserts a separator line when separators hash has an entry" do
+      header = ["Name", "Value"]
+      rows = [["foo", "bar"], ["baz", "qux"], ["zip", "zap"]]
+      result = formatter.render_table(header, rows, separators: {1 => "Mar 2023"})
+      lines = result.split("\n")
+
+      # header + separator + 3 rows = 5 lines
+      expect(lines.length).to eq(5)
+      expect(lines[2]).to include("\e[38;5;141mMar 2023\e[0m") # purple label
+      expect(lines[2]).to include("\e[2m") # DIM dashes
+      expect(lines[2]).to include("─")
+    end
+
     it "handles ANSI-colored content for width calculation" do
       header = ["Status", "Name"]
       rows = [[formatter.green("up"), "test"]]

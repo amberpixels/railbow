@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "date"
 require_relative "../formatters/base"
 
 # Override DatabaseTasks.migrate_status which is called by both
@@ -35,7 +36,22 @@ module Shine
         [colored_status, version.to_s, formatter.format_timestamp(version), name]
       end
 
-      puts formatter.render_table(header, rows)
+      versions = db_list.map { |_, v, _| v.to_s }
+      month_keys = versions.map { |v| v[0..5] }
+
+      separators = {}
+      if month_keys.uniq.size > 6
+        month_keys.each_with_index do |mk, i|
+          next if i == 0
+          if mk != month_keys[i - 1]
+            year = mk[0..3]
+            month_name = Date::ABBR_MONTHNAMES[mk[4..5].to_i]
+            separators[i] = "#{month_name} #{year}"
+          end
+        end
+      end
+
+      puts formatter.render_table(header, rows, separators: separators)
     end
   end
 end

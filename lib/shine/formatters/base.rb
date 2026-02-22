@@ -12,6 +12,8 @@ module Shine
       YELLOW = "\e[33m"
       RED = "\e[31m"
       CYAN = "\e[36m"
+      DIM = "\e[2m"
+      PURPLE = "\e[38;5;141m"
       BG_PURPLE = "\e[48;5;99m"
       WHITE = "\e[97m"
 
@@ -54,7 +56,7 @@ module Shine
         "#{ts[0..3]}-#{ts[4..5]}-#{ts[6..7]} #{ts[8..9]}:#{ts[10..11]}:#{ts[12..13]}"
       end
 
-      def render_table(header, rows)
+      def render_table(header, rows, separators: {})
         all_rows = [header] + rows
         last = header.size - 1
 
@@ -107,11 +109,20 @@ module Shine
 
         lines = []
         lines << fmt_header.call(header)
-        rows.each { |row| lines << fmt_row.call(row) }
+        rows.each_with_index do |row, i|
+          if separators.key?(i)
+            lines << month_separator(separators[i])
+          end
+          lines << fmt_row.call(row)
+        end
         lines.join("\n")
       end
 
       private
+
+      def month_separator(label)
+        "  #{DIM}───#{RESET}  #{PURPLE}#{label}#{RESET}  #{DIM}───#{RESET}"
+      end
 
       def terminal_width
         return $stdout.winsize[1] if $stdout.respond_to?(:winsize) && $stdout.tty?
