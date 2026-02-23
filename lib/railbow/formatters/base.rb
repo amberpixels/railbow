@@ -166,6 +166,14 @@ module Railbow
         lines.join("\n")
       end
 
+      def strip_ansi(str)
+        str.gsub(/\e\[[0-9;]*m/, "")
+      end
+
+      def display_width(str)
+        Unicode::DisplayWidth.of(str)
+      end
+
       private
 
       def truncate_str(str, max_width)
@@ -279,14 +287,6 @@ module Railbow
 
         lines << current.rstrip unless current.strip.empty?
         lines
-      end
-
-      def strip_ansi(str)
-        str.gsub(/\e\[[0-9;]*m/, "")
-      end
-
-      def display_width(str)
-        Unicode::DisplayWidth.of(str)
       end
     end
   end
