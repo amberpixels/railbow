@@ -72,7 +72,7 @@ RSpec.describe Railbow::RoutesFormatter do
 
   before do
     ENV.delete("HELP")
-    ENV.delete("GROUP")
+    ENV.delete("VERB")
     ENV.delete("COMPACT")
     ENV.delete("PLAIN")
     ENV.delete("NO_COLOR")
@@ -118,23 +118,6 @@ RSpec.describe Railbow::RoutesFormatter do
       result = formatter.result
       expect(result).to include("#{Railbow::RoutesFormatter::BOLD}#{Railbow::RoutesFormatter::CYAN}")
       expect(result).to include("users")
-    end
-  end
-
-  describe "GROUP=none flat list" do
-    before { allow($stdout).to receive(:tty?).and_return(true) }
-
-    it "produces flat output without section headers" do
-      ENV["GROUP"] = "none"
-      routes = [
-        {name: "users", verb: "GET", path: "/users", reqs: "users#index"},
-        {name: "posts", verb: "GET", path: "/posts", reqs: "posts#index"}
-      ]
-      formatter.section(routes)
-      result = strip_ansi(formatter.result)
-      expect(result).not_to include("──")
-      expect(result).to include("/users")
-      expect(result).to include("/posts")
     end
   end
 
@@ -304,36 +287,6 @@ RSpec.describe Railbow::RoutesFormatter do
     end
   end
 
-  describe "column alignment" do
-    before { allow($stdout).to receive(:tty?).and_return(true) }
-
-    it "preserves column alignment with varying-width content" do
-      ENV["GROUP"] = "none"
-      routes = [
-        {name: "a", verb: "GET", path: "/short", reqs: "a#b"},
-        {name: "long_prefix_name", verb: "DELETE", path: "/very/long/path/:id/edit", reqs: "long_controller#action"}
-      ]
-      formatter.section(routes)
-      lines = formatter.result.split("\n").reject(&:empty?)
-      plain_lines = lines.map { |l| strip_ansi(l) }
-      verb_positions = plain_lines.map { |l| l.index("GET") || l.index("DELETE") }
-      expect(verb_positions.compact.uniq.size).to eq(1)
-    end
-
-    it "keeps alignment even with truncated prefixes" do
-      ENV["GROUP"] = "none"
-      routes = [
-        {name: "short", verb: "GET", path: "/a", reqs: "a#b"},
-        {name: "a_very_long_prefix_that_exceeds_the_max_width_limit", verb: "POST", path: "/b", reqs: "c#d"}
-      ]
-      formatter.section(routes)
-      lines = formatter.result.split("\n").reject(&:empty?)
-      plain_lines = lines.map { |l| strip_ansi(l) }
-      verb_positions = plain_lines.map { |l| l.index("GET") || l.index("POST") }
-      expect(verb_positions.compact.uniq.size).to eq(1)
-    end
-  end
-
   describe "per-group column widths" do
     before { allow($stdout).to receive(:tty?).and_return(true) }
 
@@ -353,32 +306,68 @@ RSpec.describe Railbow::RoutesFormatter do
     end
   end
 
-  describe "GROUP feature" do
+  describe "VERB filter" do
     before { allow($stdout).to receive(:tty?).and_return(true) }
 
-    it "groups by controller when GROUP=controller" do
-      ENV["GROUP"] = "controller"
-      routes = [
+    let(:mixed_routes) do
+      [
         {name: "users", verb: "GET", path: "/users", reqs: "users#index"},
-        {name: "posts", verb: "GET", path: "/posts", reqs: "posts#index"},
-        {name: "", verb: "POST", path: "/users", reqs: "users#create"}
+        {name: "", verb: "POST", path: "/users", reqs: "users#create"},
+        {name: "", verb: "PUT", path: "/users/:id", reqs: "users#update"},
+        {name: "", verb: "DELETE", path: "/users/:id", reqs: "users#destroy"}
       ]
-      formatter.section(routes)
-      result = strip_ansi(formatter.result)
-      expect(result).to include("── users ──")
-      expect(result).to include("── posts ──")
     end
 
-    it "groups by verb when GROUP=verb" do
-      ENV["GROUP"] = "verb"
+    it "filters to a single verb" do
+      ENV["VERB"] = "GET"
+
+      formatter.section(mixed_routes)
+      result = strip_ansi(formatter.result)
+      expect(result).to include("GET")
+      expect(result).not_to include("POST")
+      expect(result).not_to include("DELETE")
+    end
+
+    it "filters to multiple verbs" do
+      ENV["VERB"] = "POST,PUT"
+
+      formatter.section(mixed_routes)
+      result = strip_ansi(formatter.result)
+      expect(result).to include("POST")
+      expect(result).to include("PUT")
+      expect(result).not_to include("DELETE")
+    end
+
+    it "shows all routes when VERB=ALL" do
+      ENV["VERB"] = "ALL"
+
+      formatter.section(mixed_routes)
+      result = strip_ansi(formatter.result)
+      expect(result).to include("GET")
+      expect(result).to include("POST")
+      expect(result).to include("DELETE")
+    end
+
+    it "is case-insensitive" do
+      ENV["VERB"] = "get"
+
+      formatter.section(mixed_routes)
+      result = strip_ansi(formatter.result)
+      expect(result).to include("GET")
+      expect(result).not_to include("POST")
+    end
+
+    it "matches multi-verb routes if any verb matches" do
+      ENV["VERB"] = "POST"
+
       routes = [
-        {name: "users", verb: "GET", path: "/users", reqs: "users#index"},
-        {name: "", verb: "POST", path: "/users", reqs: "users#create"}
+        {name: "root", verb: "GET|POST", path: "/", reqs: "home#index"},
+        {name: "", verb: "DELETE", path: "/users/:id", reqs: "users#destroy"}
       ]
       formatter.section(routes)
       result = strip_ansi(formatter.result)
-      expect(result).to include("── GET ──")
-      expect(result).to include("── POST ──")
+      expect(result).to include("GET|POST")
+      expect(result).not_to include("DELETE")
     end
   end
 
@@ -390,8 +379,7 @@ RSpec.describe Railbow::RoutesFormatter do
       formatter.section(sample_routes)
       result = formatter.result
       expect(result).to include("Railbow Routes Options")
-      expect(result).to include("GROUP=controller")
-      expect(result).to include("GROUP=none")
+      expect(result).to include("VERB=GET")
       expect(result).to include("COMPACT")
       expect(result).to include("PLAIN=1")
     end

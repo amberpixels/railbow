@@ -22,20 +22,20 @@ module Railbow
 
       #{BOLD}Railbow Routes Options:#{RESET}
 
-        #{CYAN}GROUP=controller#{RESET}  Group routes by controller (default)
-        #{CYAN}GROUP=verb#{RESET}        Group routes by HTTP verb
-        #{CYAN}GROUP=none#{RESET}        Flat list, no grouping
+        #{CYAN}VERB=GET#{RESET}          Show only GET routes
+        #{CYAN}VERB=POST,PUT#{RESET}     Show only POST and PUT routes
         #{CYAN}COMPACT=0#{RESET}         Keep (.:format) suffixes
         #{CYAN}PLAIN=1#{RESET}           Disable Railbow formatting (plain Rails output)
         #{CYAN}HELP=1#{RESET}            Show this help message
 
       #{DIM}Auto-disabled when piped, in CI, or when called by an LLM agent.#{RESET}
-      #{DIM}Example: GROUP=none rails routes#{RESET}
+      #{DIM}Example: VERB=GET rails routes#{RESET}
 
     HELP
 
     def section_title(title)
       return super unless tty?
+      return if ENV["HELP"] == "1"
 
       @buffer << "\n#{BOLD}#{CYAN}#{title}:#{RESET}"
     end
@@ -48,36 +48,36 @@ module Railbow
       return super unless tty?
 
       if ENV["HELP"] == "1"
-        @buffer << HELP_TEXT_COLOR
+        unless @help_shown
+          @buffer << HELP_TEXT_COLOR
+          @help_shown = true
+        end
         return
       end
 
-      group_by = (ENV["GROUP"] || "controller").downcase
       compact = compact_mode?
       prepared = routes.map { |r| prepare_route(r, compact) }
+      prepared = filter_by_verb(prepared)
 
-      if group_by == "none"
-        render_group(nil, prepared)
-      else
-        groups = group_routes(prepared, group_by)
-        groups.each { |label, group| render_group(label, group) }
-      end
+      groups = group_routes(prepared)
+      groups.each { |label, group| render_group(label, group) }
     end
 
     private
 
-    def group_routes(routes, group_by)
-      case group_by
-      when "controller"
-        grouped = routes.group_by { |r| r[:reqs].include?("#") ? r[:reqs].split("#").first : "(other)" }
-        other = grouped.delete("(other)")
-        grouped["(other)"] = other if other
-        grouped
-      when "verb"
-        routes.group_by { |r| r[:verb].empty? ? "(none)" : r[:verb] }
-      else
-        {"All" => routes}
-      end
+    def group_routes(routes)
+      grouped = routes.group_by { |r| r[:reqs].include?("#") ? r[:reqs].split("#").first : "(other)" }
+      other = grouped.delete("(other)")
+      grouped["(other)"] = other if other
+      grouped
+    end
+
+    def filter_by_verb(routes)
+      verb_filter = ENV["VERB"]
+      return routes if verb_filter.nil? || verb_filter.strip.empty? || verb_filter.strip.upcase == "ALL"
+
+      allowed = verb_filter.split(",").map { |v| v.strip.upcase }
+      routes.select { |r| (r[:verb].split("|") & allowed).any? }
     end
 
     def render_group(label, routes)
