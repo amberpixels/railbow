@@ -42,6 +42,11 @@ module Railbow
       output.strip.downcase
     end
 
+    def current_git_name
+      output, _status = Open3.capture2("git", "config", "user.name")
+      output.strip
+    end
+
     def parse_since(value)
       return nil if value.nil? || value.strip.downcase == "all"
 
@@ -163,6 +168,7 @@ module Railbow
       author_names = {}
       author_emails = {}
       git_email = nil
+      git_name = nil
       if author_enabled
         sample_file = version_to_file.values.first
         if sample_file
@@ -172,6 +178,7 @@ module Railbow
           author_emails = result[:emails]
         end
         git_email = current_git_email if author_mode == "me"
+        git_name = current_git_name if author_mode == "all"
       end
 
       # Build header
@@ -195,11 +202,13 @@ module Railbow
           filepath = version_to_file[version.to_s]
           basename = filepath ? File.basename(filepath) : nil
 
+          # Uncommitted migrations have no git author — treat them as mine
           if author_mode == "all"
-            row << (basename ? author_names[basename] || "" : "")
+            author = basename ? author_names[basename] : nil
+            row << (author || (basename ? git_name : ""))
           elsif author_mode == "me" && basename && git_email
             email = author_emails[basename]
-            highlight_rows << idx if email && email == git_email
+            highlight_rows << idx if email.nil? || email == git_email
           end
         end
 
