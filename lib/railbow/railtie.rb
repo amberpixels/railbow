@@ -14,6 +14,13 @@ module Railbow
       end
     end
 
+    # Enhance routes output with colors
+    initializer "railbow.enhance_routes", after: :load_config_initializers do
+      require "action_dispatch/routing/inspector"
+      require_relative "routes_formatter"
+      ActionDispatch::Routing::ConsoleFormatter::Sheet.prepend(Railbow::RoutesFormatter)
+    end
+
     # Load custom Rake tasks
     rake_tasks do
       load "railbow/tasks/migrate_status.rake"
