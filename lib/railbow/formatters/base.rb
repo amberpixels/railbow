@@ -184,15 +184,12 @@ module Railbow
       end
 
       def highlight_row(str)
-        # Split on the last │ to separate prefix columns from the last column
-        last_sep = str.rindex("│")
-        return "#{BRIGHT_WHITE}#{strip_ansi(str)}#{RESET}" unless last_sep
-
-        prefix = str[0...last_sep]
-        suffix = str[last_sep..]
-
-        # Brighten prefix columns, keep last column colors intact
-        "#{BRIGHT_WHITE}#{strip_ansi(prefix)}#{RESET}#{suffix}"
+        # Wrap in WHITE; existing ANSI codes (status colors, table tags) override it,
+        # and WHITE resumes after each RESET. Keep │ borders in terminal default.
+        str
+          .gsub(RESET, "#{RESET}#{WHITE}")
+          .gsub("│", "#{RESET}│#{WHITE}")
+          .then { |s| "#{WHITE}#{s}#{RESET}" }
       end
 
       def month_separator(label)
@@ -214,9 +211,11 @@ module Railbow
         # the original and consuming visible chars line by line
         result = []
         pos = 0 # position in original str
+        last_color = nil # track the last active color across lines
         plain_lines.each do |plain_line|
           target = plain_line.lstrip
           line = +""
+          line << last_color if last_color
           visible_consumed = 0
           skipping_leading = true
 
@@ -224,7 +223,9 @@ module Railbow
             if str[pos] == "\e"
               # Consume full ANSI escape
               esc_end = str.index("m", pos) || pos
-              line << str[pos..esc_end]
+              code = str[pos..esc_end]
+              line << code
+              last_color = (code == RESET) ? nil : code
               pos = esc_end + 1
             else
               ch = str[pos]
@@ -240,7 +241,9 @@ module Railbow
           # Consume any trailing ANSI codes attached to this segment
           while pos < str.length && str[pos] == "\e"
             esc_end = str.index("m", pos) || pos
-            line << str[pos..esc_end]
+            code = str[pos..esc_end]
+            line << code
+            last_color = (code == RESET) ? nil : code
             pos = esc_end + 1
           end
 
