@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "formatters/base"
+require_relative "table"
 
 module Railbow
   module RoutesFormatter
@@ -44,9 +45,6 @@ module Railbow
       #{DIM}Example: GROUP=none rails routes#{RESET}
 
     HELP
-
-    HEADER_LABELS = ["Verb", "URI Pattern", "Controller#Action", "Prefix"].freeze
-    FORMAT_SUFFIX = "(.:format)"
 
     def section_title(title)
       if tty?
@@ -105,40 +103,24 @@ module Railbow
         @buffer << "#{BOLD}#{CYAN}\u2500\u2500 #{label} \u2500\u2500#{RESET}"
       end
 
-      verb_w, path_w, reqs_w = compute_widths(routes)
+      columns = [
+        Table::Column.new(label: "Verb"),
+        Table::Column.new(label: "URI Pattern"),
+        Table::Column.new(label: "Controller#Action"),
+        Table::Column.new(label: "Prefix")
+      ]
 
-      @buffer << render_header(verb_w, path_w, reqs_w)
-      routes.each do |r|
-        @buffer << render_route(r, verb_w, path_w, reqs_w)
-      end
-    end
+      rows = routes.map { |r|
+        [
+          colorize_verb(r[:verb]),
+          colorize_path(r[:path]),
+          colorize_reqs(r[:reqs]),
+          r[:name].empty? ? "" : colorize_name(r[:name])
+        ]
+      }
 
-    def compute_widths(routes)
-      verb_label, path_label, reqs_label, = HEADER_LABELS
-
-      verb_w = [routes.map { |r| r[:verb].length }.max || 0, verb_label.length].max
-      path_w = [routes.map { |r| r[:path].length }.max || 0, path_label.length].max
-      reqs_w = [routes.map { |r| r[:reqs].length }.max || 0, reqs_label.length].max
-
-      [verb_w, path_w, reqs_w]
-    end
-
-    def render_header(verb_w, path_w, reqs_w)
-      verb_label, path_label, reqs_label, prefix_label = HEADER_LABELS
-      verb_h = "#{BOLD}#{verb_label}#{RESET}" + (" " * (verb_w - verb_label.length))
-      path_h = "#{BOLD}#{path_label}#{RESET}" + (" " * (path_w - path_label.length))
-      reqs_h = "#{BOLD}#{reqs_label}#{RESET}" + (" " * (reqs_w - reqs_label.length))
-
-      "#{verb_h} #{path_h} #{reqs_h} #{BOLD}#{prefix_label}#{RESET}"
-    end
-
-    def render_route(r, verb_w, path_w, reqs_w)
-      verb_col = pad_left(colorize_verb(r[:verb]), r[:verb], verb_w)
-      path_col = pad_left(colorize_path(r[:path]), r[:path], path_w)
-      reqs_col = pad_left(colorize_reqs(r[:reqs]), r[:reqs], reqs_w)
-      name_col = r[:name].empty? ? "" : " #{colorize_name(r[:name])}"
-
-      "#{verb_col} #{path_col} #{reqs_col}#{name_col}"
+      renderer = Table::Renderer.new(columns: columns, theme: Table::Themes::PLAIN)
+      @buffer << renderer.render(rows)
     end
 
     def prepare_route(route, compact)
@@ -181,15 +163,6 @@ module Railbow
       return name if name.empty?
 
       "#{DIM}#{name}#{RESET}"
-    end
-
-    def pad_left(colored, plain, width)
-      padding = width - measure_width(plain)
-      (padding > 0) ? "#{colored}#{" " * padding}" : colored
-    end
-
-    def measure_width(str)
-      Unicode::DisplayWidth.of(str)
     end
 
     def tty?

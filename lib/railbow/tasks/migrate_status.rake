@@ -4,6 +4,7 @@ require "date"
 require "open3"
 require_relative "../formatters/base"
 require_relative "../migration_parser"
+require_relative "../table"
 require_relative "../logo"
 
 # Override DatabaseTasks.migrate_status which is called by both
@@ -181,11 +182,18 @@ module Railbow
         git_name = current_git_name if author_mode == "all"
       end
 
-      # Build header
+      # Build columns
       name_col_width = 50
-      header = ["Status", "Migration ID", "Created At", "Migration Name"]
-      header << "Author" if author_mode == "all"
-      header << "Tables" if tables_enabled
+      table_columns = [
+        Railbow::Table::Column.new(label: "Status"),
+        Railbow::Table::Column.new(label: "Migration ID"),
+        Railbow::Table::Column.new(label: "Created At"),
+        Railbow::Table::Column.new(label: "Migration Name",
+          max_width: (tables_enabled || author_mode == "all") ? name_col_width : nil,
+          truncate: tables_enabled || author_mode == "all")
+      ]
+      table_columns << Railbow::Table::Column.new(label: "Author") if author_mode == "all"
+      table_columns << Railbow::Table::Column.new(label: "Tables") if tables_enabled
 
       # Build rows and track highlight indices for AUTHOR=me
       highlight_rows = Set.new
@@ -220,10 +228,6 @@ module Railbow
         row
       end
 
-      # Truncation for name column
-      truncate = {}
-      truncate[3] = name_col_width if tables_enabled || author_mode == "all"
-
       # Calendar separators
       separators = {}
       if calendar_enabled
@@ -242,8 +246,11 @@ module Railbow
         end
       end
 
-      puts formatter.render_table(header, rows,
-        separators: separators, truncate_cols: truncate, highlight_rows: highlight_rows)
+      renderer = Railbow::Table::Renderer.new(
+        columns: table_columns,
+        theme: Railbow::Table::Themes::WALLS
+      )
+      puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows)
     end
   end
 end
