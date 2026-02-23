@@ -38,6 +38,8 @@ RSpec.describe Railbow::MigrationFormatter do
 
   subject(:migration) { migration_class.new }
 
+  before { allow(Railbow).to receive(:plain?).and_return(false) }
+
   describe "#announce" do
     it "displays migrating with emoji and migration name" do
       migration.announce("migrating")

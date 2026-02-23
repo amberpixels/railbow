@@ -18,20 +18,6 @@ module Railbow
     DIM = Formatters::Base::DIM
     CYAN = Formatters::Base::CYAN
 
-    HELP_TEXT_PLAIN = <<~HELP
-
-      Railbow Routes Options:
-
-        GROUP=controller  Group routes by controller (default)
-        GROUP=verb        Group routes by HTTP verb
-        GROUP=none        Flat list, no grouping
-        COMPACT=0         Keep (.:format) suffixes
-        HELP=1            Show this help message
-
-      Example: GROUP=none rails routes
-
-    HELP
-
     HELP_TEXT_COLOR = <<~HELP
 
       #{BOLD}Railbow Routes Options:#{RESET}
@@ -40,32 +26,29 @@ module Railbow
         #{CYAN}GROUP=verb#{RESET}        Group routes by HTTP verb
         #{CYAN}GROUP=none#{RESET}        Flat list, no grouping
         #{CYAN}COMPACT=0#{RESET}         Keep (.:format) suffixes
+        #{CYAN}PLAIN=1#{RESET}           Disable Railbow formatting (plain Rails output)
         #{CYAN}HELP=1#{RESET}            Show this help message
 
+      #{DIM}Auto-disabled when piped, in CI, or when called by an LLM agent.#{RESET}
       #{DIM}Example: GROUP=none rails routes#{RESET}
 
     HELP
 
     def section_title(title)
-      if tty?
-        @buffer << "\n#{BOLD}#{CYAN}#{title}:#{RESET}"
-      else
-        super
-      end
+      return super unless tty?
+
+      @buffer << "\n#{BOLD}#{CYAN}#{title}:#{RESET}"
     end
 
-    def header(_routes)
+    def header(routes)
       super unless tty?
     end
 
     def section(routes)
-      if ENV["HELP"] == "1"
-        @buffer << (tty? ? HELP_TEXT_COLOR : HELP_TEXT_PLAIN)
-        return
-      end
+      return super unless tty?
 
-      unless tty?
-        super
+      if ENV["HELP"] == "1"
+        @buffer << HELP_TEXT_COLOR
         return
       end
 
@@ -166,7 +149,7 @@ module Railbow
     end
 
     def tty?
-      $stdout.tty?
+      !Railbow.plain?
     end
   end
 end

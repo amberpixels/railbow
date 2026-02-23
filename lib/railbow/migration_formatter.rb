@@ -7,6 +7,8 @@ module Railbow
     FORMATTER = Formatters::Base.new.freeze
 
     def announce(message)
+      return super if Railbow.plain?
+
       f = FORMATTER
       migration_name = self.class.name&.demodulize || "Migration"
 
@@ -32,6 +34,8 @@ module Railbow
     end
 
     def say_with_time(message)
+      return super { yield } if Railbow.plain?
+
       f = FORMATTER
       result = nil
       time = Benchmark.measure { result = yield }
@@ -44,11 +48,15 @@ module Railbow
     end
 
     def say(message, subitem = false)
+      return super if Railbow.plain?
+
       prefix = subitem ? "     " : "  "
       write("#{prefix}#{message}")
     end
 
     def write(text = "")
+      return super if Railbow.plain?
+
       puts text
     end
   end
