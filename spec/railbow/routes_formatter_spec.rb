@@ -74,6 +74,10 @@ RSpec.describe Railbow::RoutesFormatter do
     ENV.delete("HELP")
     ENV.delete("GROUP")
     ENV.delete("COMPACT")
+    ENV.delete("PLAIN")
+    ENV.delete("NO_COLOR")
+    ENV.delete("CLAUDECODE")
+    ENV.delete("CI")
   end
 
   def strip_ansi(str)
@@ -278,16 +282,25 @@ RSpec.describe Railbow::RoutesFormatter do
   describe "non-TTY passthrough" do
     before { allow($stdout).to receive(:tty?).and_return(false) }
 
-    it "produces plain text without ANSI codes" do
+    it "falls back to Rails default output without ANSI codes" do
       formatter.section(sample_routes)
       result = formatter.result
       expect(result).not_to include("\e[")
     end
 
-    it "produces plain section_title without ANSI codes" do
+    it "falls back to Rails default section_title without ANSI codes" do
       formatter.section_title("Routes for Devise::Engine")
       result = formatter.result
       expect(result).not_to include("\e[")
+    end
+
+    it "uses Rails default column layout (Prefix first)" do
+      formatter.section(sample_routes)
+      result = formatter.result
+      expect(result).to include("Prefix")
+      expect(result).to include("Verb")
+      expect(result).to include("URI Pattern")
+      expect(result).to include("Controller#Action")
     end
   end
 
@@ -370,6 +383,8 @@ RSpec.describe Railbow::RoutesFormatter do
   end
 
   describe "HELP feature" do
+    before { allow($stdout).to receive(:tty?).and_return(true) }
+
     it "shows help text when HELP=1" do
       ENV["HELP"] = "1"
       formatter.section(sample_routes)
@@ -378,6 +393,40 @@ RSpec.describe Railbow::RoutesFormatter do
       expect(result).to include("GROUP=controller")
       expect(result).to include("GROUP=none")
       expect(result).to include("COMPACT")
+      expect(result).to include("PLAIN=1")
+    end
+  end
+
+  describe "plain mode (formatting disabled)" do
+    before { allow($stdout).to receive(:tty?).and_return(true) }
+
+    it "falls back to Rails output when PLAIN=1" do
+      ENV["PLAIN"] = "1"
+      formatter.section(sample_routes)
+      result = formatter.result
+      expect(result).not_to include("\e[")
+      expect(result).to include("Prefix")
+    end
+
+    it "falls back to Rails output when NO_COLOR is set" do
+      ENV["NO_COLOR"] = ""
+      formatter.section(sample_routes)
+      result = formatter.result
+      expect(result).not_to include("\e[")
+    end
+
+    it "falls back to Rails output when CLAUDECODE is set" do
+      ENV["CLAUDECODE"] = "1"
+      formatter.section(sample_routes)
+      result = formatter.result
+      expect(result).not_to include("\e[")
+    end
+
+    it "falls back to Rails output when CI is set" do
+      ENV["CI"] = "true"
+      formatter.section(sample_routes)
+      result = formatter.result
+      expect(result).not_to include("\e[")
     end
   end
 end

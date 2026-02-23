@@ -92,7 +92,11 @@ module Railbow
                              all  — add an Author column
                              me   — highlight your own migrations (via git config user.name)
 
+          PLAIN=1            Disable Railbow formatting (plain Rails output)
+
           HELP=1             Show this help message
+
+        \e[2mAuto-disabled when piped, in CI, or when called by an LLM agent.\e[0m
 
         \e[1mExamples:\e[0m
           rake db:migrate:status
@@ -106,6 +110,8 @@ module Railbow
     public
 
     def migrate_status
+      return super if Railbow.plain?
+
       if ENV["HELP"] == "1"
         print_help
         return
