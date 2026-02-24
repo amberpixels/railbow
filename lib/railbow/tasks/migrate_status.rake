@@ -75,7 +75,7 @@ module Railbow
         Enhanced db:migrate:status
 
         \e[1mUsage:\e[0m
-          rake db:migrate:status [ENV_VAR=value ...]
+          [ENV_VAR=value ...] rake db:migrate:status
 
         \e[1mOptions:\e[0m
           SINCE=<period>     Filter migrations by age (default: all)
