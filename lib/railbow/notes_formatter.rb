@@ -265,7 +265,7 @@ module Railbow
         Enhanced rails notes
 
         \e[1mUsage:\e[0m
-          rails notes [ENV_VAR=value ...]
+          [ENV_VAR=value ...] rails notes
 
         \e[1mOptions:\e[0m
           AUTHOR=<mode>      Show annotation authors from git blame
