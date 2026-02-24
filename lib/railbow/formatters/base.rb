@@ -46,6 +46,9 @@ module Railbow
         TABLE_PALETTE[Zlib.crc32(table_name.to_s) % TABLE_PALETTE.size]
       end
 
+      def diff_tag_branch(name) = "\e[38;5;39m● #{name}#{RESET}"
+      def diff_tag_uncommitted = "\e[38;5;220m● new#{RESET}"
+
       def table_tag(table_name)
         color_code = table_color(table_name)
         "\e[38;5;#{color_code}m● #{table_name}#{RESET}"
@@ -86,6 +89,49 @@ module Railbow
         return ts if ts.length != 14
 
         "#{ts[0..3]}-#{ts[4..5]}-#{ts[6..7]} #{ts[8..9]}:#{ts[10..11]}:#{ts[12..13]}"
+      end
+
+      def format_relative_time(timestamp)
+        ts = timestamp.to_s
+        return ts if ts.length != 14
+
+        time = Time.new(
+          ts[0..3].to_i, ts[4..5].to_i, ts[6..7].to_i,
+          ts[8..9].to_i, ts[10..11].to_i, ts[12..13].to_i
+        )
+        diff = Time.now - time
+        return "just now" if diff < 0
+
+        minutes = diff.to_i / 60
+        hours = minutes / 60
+        days = hours / 24
+        weeks = days / 7
+        months = days / 30
+        years = days / 365
+
+        if minutes < 1 then "just now"
+        elsif hours < 1 then "~#{minutes}min ago"
+        elsif days < 1 then "~#{hours}hr ago"
+        elsif weeks < 1 then "~#{days}d ago"
+        elsif months < 1 then "~#{weeks}w ago"
+        elsif years < 1 then "~#{months}mo ago"
+        else "~#{years}y ago"
+        end
+      end
+
+      def truncate_str(str, max_width)
+        return str if display_width(strip_ansi(str)) <= max_width
+
+        plain = strip_ansi(str)
+        truncated = +""
+        width = 0
+        plain.each_char do |ch|
+          ch_width = display_width(ch)
+          break if width + ch_width > max_width - 3
+          truncated << ch
+          width += ch_width
+        end
+        "#{truncated}..."
       end
 
       def strip_ansi(str)

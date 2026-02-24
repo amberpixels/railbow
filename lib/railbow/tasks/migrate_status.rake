@@ -48,6 +48,93 @@ module Railbow
       output.strip
     end
 
+    def detect_default_branch(override)
+      return override if override && !override.empty?
+
+      output, status = Open3.capture2("git", "symbolic-ref", "refs/remotes/origin/HEAD")
+      if status.success?
+        branch = output.strip.sub(%r{^refs/remotes/origin/}, "")
+        return branch unless branch.empty?
+      end
+
+      %w[main master].each do |candidate|
+        _, st = Open3.capture2("git", "rev-parse", "--verify", "refs/heads/#{candidate}")
+        return candidate if st.success?
+      end
+
+      "main"
+    end
+
+    def git_branch_migration_origins(migrate_dir, base_branch, branch_mask)
+      merge_base_out, mb_status = Open3.capture2("git", "merge-base", "HEAD", base_branch)
+      return {} unless mb_status.success?
+
+      merge_base = merge_base_out.strip
+      diff_out, diff_status = Open3.capture2(
+        "git", "diff", "--name-only", "--diff-filter=A", merge_base, "HEAD", "--", migrate_dir
+      )
+      return {} unless diff_status.success?
+
+      files = diff_out.each_line.map(&:strip).reject(&:empty?)
+      origins = {}
+
+      files.each do |filepath|
+        basename = File.basename(filepath)
+
+        # Find the commit that added this file
+        commit_out, cs = Open3.capture2(
+          "git", "log", "--diff-filter=A", "--format=%H", "-1", "--", filepath
+        )
+        next unless cs.success?
+        commit = commit_out.strip
+        next if commit.empty?
+
+        # Find branches containing this commit
+        branches_out, bs = Open3.capture2(
+          "git", "branch", "--contains", commit, "--format=%(refname:short)"
+        )
+        next unless bs.success?
+        branches = branches_out.each_line.map(&:strip).reject(&:empty?)
+        next if branches.empty?
+
+        # Pick the branch whose tip is closest to the adding commit
+        best = if branches.size == 1
+          branches.first
+        else
+          branches.min_by do |b|
+            count_out, _ = Open3.capture2("git", "rev-list", "--count", "#{commit}..#{b}")
+            count_out.strip.to_i
+          end
+        end
+
+        # Apply mask
+        label = best
+        if !branch_mask.empty? && best
+          m = best.match(Regexp.new(branch_mask, Regexp::IGNORECASE))
+          label = m[1] if m && m[1]
+        end
+
+        origins[basename] = label
+      end
+
+      origins
+    end
+
+    def git_uncommitted_migration_files(migrate_dir)
+      output, status = Open3.capture2("git", "status", "--porcelain", "--", migrate_dir)
+      return Set.new unless status.success?
+
+      result = Set.new
+      output.each_line do |line|
+        code = line[0..1]
+        next unless ["??", "A ", "AM", "M "].include?(code)
+
+        filepath = line[3..].strip
+        result << File.basename(filepath) unless filepath.empty?
+      end
+      result
+    end
+
     def parse_since(value)
       return nil if value.nil? || value.strip.downcase == "all"
 
@@ -86,11 +173,19 @@ module Railbow
 
           TABLES=1           Parse migration files and show a Tables column
                              with colored tags for each referenced table
+          NOWRAP=1           Truncate the Tables column instead of wrapping
 
           AUTHOR=<mode>      Show migration file authors from git history
                              off  — disabled (default)
                              all  — add an Author column
                              me   — highlight your own migrations (via git config user.name)
+
+          AGO=1              Show relative timestamps instead of absolute (e.g. ~3d ago)
+
+          DIFF=1             Tag migrations by git origin (branch vs uncommitted)
+          BASE=<branch>      Base branch for DIFF comparison (default: auto-detected)
+          BRANCH_MASK=<re>   Regex with capture group to extract branch label
+                             e.g. BRANCH_MASK='(WS-[^/]+)/' for ws-1234/foo → ws-1234
 
           PLAIN=1            Disable Railbow formatting (plain Rails output)
 
@@ -103,6 +198,10 @@ module Railbow
           SINCE=2mo CALENDAR=1 rake db:migrate:status
           TABLES=1 AUTHOR=all rake db:migrate:status
           AUTHOR=me SINCE=3mo rake db:migrate:status
+          AGO=1 rake db:migrate:status
+          DIFF=1 rake db:migrate:status
+          DIFF=1 BASE=develop rake db:migrate:status
+          DIFF=1 BRANCH_MASK='(WS-[^/]+)/' rake db:migrate:status
 
       HELP
     end
@@ -140,9 +239,18 @@ module Railbow
       show_tables = ENV.fetch("TABLES", "0")
       author_mode = ENV.fetch("AUTHOR", "off").strip.downcase
 
+      diff_value = ENV.fetch("DIFF", "0")
+      base_override = ENV.fetch("BASE", "").strip
+      branch_mask = ENV.fetch("BRANCH_MASK", "").strip
+      ago_value = ENV.fetch("AGO", "0")
+      nowrap_value = ENV.fetch("NOWRAP", "0")
+
       calendar_enabled = %w[1 true yes on].include?(show_calendar.strip.downcase)
       tables_enabled = %w[1 true yes on].include?(show_tables.strip.downcase)
       author_enabled = %w[all me].include?(author_mode)
+      diff_enabled = %w[1 true yes on].include?(diff_value.strip.downcase)
+      ago_enabled = %w[1 true yes on].include?(ago_value.strip.downcase)
+      nowrap_enabled = %w[1 true yes on].include?(nowrap_value.strip.downcase)
 
       # Filter by SINCE period (default: all)
       since_cutoff = parse_since(since_value)
@@ -165,7 +273,7 @@ module Railbow
 
       # Build version → filename lookup (needed for tables or author)
       version_to_file = {}
-      if tables_enabled || author_enabled
+      if tables_enabled || author_enabled || diff_enabled
         migration_connection_pool.migration_context.migrations.each do |m|
           version_to_file[m.version.to_s] = m.filename
         end
@@ -188,18 +296,33 @@ module Railbow
         git_name = current_git_name if author_mode == "all"
       end
 
+      # Load diff data if needed
+      branch_origins = {}
+      uncommitted_files = Set.new
+      if diff_enabled
+        sample_file = version_to_file.values.first
+        if sample_file
+          migrate_dir = File.dirname(sample_file)
+          base_branch = detect_default_branch(base_override)
+          branch_origins = git_branch_migration_origins(migrate_dir, base_branch, branch_mask)
+          uncommitted_files = git_uncommitted_migration_files(migrate_dir)
+          uncommitted_files.each { |f| branch_origins.delete(f) }
+        end
+      end
+
       # Build columns
-      name_col_width = 50
+      needs_name_truncation = tables_enabled || author_mode == "all" || diff_enabled
+      name_col_width = needs_name_truncation ? 60 : nil
       table_columns = [
         Railbow::Table::Column.new(label: "Status"),
         Railbow::Table::Column.new(label: "Migration ID"),
-        Railbow::Table::Column.new(label: "Created At"),
+        Railbow::Table::Column.new(label: ago_enabled ? "Age" : "Created At"),
         Railbow::Table::Column.new(label: "Migration Name",
-          max_width: (tables_enabled || author_mode == "all") ? name_col_width : nil,
-          truncate: tables_enabled || author_mode == "all")
+          max_width: name_col_width,
+          truncate: needs_name_truncation)
       ]
       table_columns << Railbow::Table::Column.new(label: "Author") if author_mode == "all"
-      table_columns << Railbow::Table::Column.new(label: "Tables") if tables_enabled
+      table_columns << Railbow::Table::Column.new(label: "Tables", truncate: nowrap_enabled) if tables_enabled
 
       # Build rows and track highlight indices for AUTHOR=me
       highlight_rows = Set.new
@@ -210,7 +333,29 @@ module Railbow
         else status
         end
         display_name = name.include?("NO FILE") ? formatter.red("NO FILE") : name
-        row = [colored_status, version.to_s, formatter.format_timestamp(version), display_name]
+
+        if diff_enabled && !name.include?("NO FILE")
+          filepath = version_to_file[version.to_s]
+          basename = filepath ? File.basename(filepath) : nil
+          diff_tag = if basename && uncommitted_files.include?(basename)
+            highlight_rows << idx
+            formatter.diff_tag_uncommitted
+          elsif basename && branch_origins.key?(basename)
+            formatter.diff_tag_branch(branch_origins[basename])
+          end
+
+          if diff_tag && name_col_width
+            tag_width = formatter.display_width(formatter.strip_ansi(diff_tag))
+            available = name_col_width - tag_width - 2
+            display_name = formatter.truncate_str(display_name, available)
+            name_width = formatter.display_width(formatter.strip_ansi(display_name))
+            padding = name_col_width - name_width - tag_width
+            display_name = "#{display_name}#{" " * [padding, 2].max}#{diff_tag}"
+          end
+        end
+
+        created_at = ago_enabled ? formatter.format_relative_time(version) : formatter.format_timestamp(version)
+        row = [colored_status, version.to_s, created_at, display_name]
 
         if author_enabled
           filepath = version_to_file[version.to_s]

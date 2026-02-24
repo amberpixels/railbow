@@ -113,7 +113,14 @@ module Railbow
         prefix_width = compute_prefix_width(widths, last)
         last_col_max = term_w ? [term_w - prefix_width, 10].max : nil
 
-        if last_col_max && display_width(last_cell_plain) > last_col_max
+        # Truncate to terminal width (by whole words) instead of wrapping
+        if columns[last].truncate && !columns[last].max_width && last_col_max &&
+            display_width(last_cell_plain) > last_col_max
+          last_cell_raw = truncate_by_words(last_cell_raw, last_col_max)
+          return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
+        end
+
+        if last_col_max && display_width(strip_ansi(last_cell_raw)) > last_col_max
           blank_prefix = prefix_parts.map { |part|
             " " * display_width(strip_ansi(part))
           }.join(sep)
@@ -161,6 +168,28 @@ module Railbow
           width += ch_width
         end
         "#{truncated}..."
+      end
+
+      def truncate_by_words(str, max_width)
+        return str if display_width(strip_ansi(str)) <= max_width
+
+        segments = str.scan(/\S+\s*/)
+        result = +""
+        width = 0
+
+        segments.each do |seg|
+          seg_plain = strip_ansi(seg)
+          seg_width = display_width(seg_plain)
+          if width + seg_width + 3 > max_width && width > 0
+            result.rstrip!
+            result << "..."
+            return result
+          end
+          result << seg
+          width += seg_width
+        end
+
+        result
       end
 
       def terminal_width
