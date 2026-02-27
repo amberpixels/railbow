@@ -48,6 +48,18 @@ module Railbow
       output.strip
     end
 
+    def current_branch_name(branch_mask)
+      output, status = Open3.capture2("git", "rev-parse", "--abbrev-ref", "HEAD")
+      return "HEAD" unless status.success?
+
+      branch = output.strip
+      if !branch_mask.empty?
+        m = branch.match(Regexp.new(branch_mask, Regexp::IGNORECASE))
+        branch = m[1] if m && m[1]
+      end
+      branch
+    end
+
     def detect_default_branch(override)
       return override if override && !override.empty?
 
@@ -149,11 +161,19 @@ module Railbow
                                    Values: all, 2mo, 1w, 30d, 1y, etc.
                                    Units: d (days), w (weeks), mo/m (months), y (years)
 
+          RBW_DATE=<mode>          Date column format (default: full):
+                                   full       — 2026-01-30 12:08:54 (column: Created At)
+                                   rel        — ~3d ago
+                                   short      — Jan 30 (column: Date)
+                                   custom(…)  — user strftime, e.g. custom(%b %d, %Y)
+
           RBW_VIEW=<options>       Display options (comma-separated):
-                                   calendar   — show month/year separator lines
+                                   calendar   — show month/year separator lines + week ticks
                                    tables     — parse migration files, show Tables column
                                    tables:nowrap — truncate Tables column instead of wrapping
-                                   ago        — show relative timestamps (~3d ago)
+
+          RBW_CALENDAR=<options>  Calendar sub-options (requires RBW_VIEW=calendar):
+                                   wticks     — show week tick marks on date column
 
           RBW_GIT=<options>        Git integration (comma-separated):
                                    author     — add an Author column (same as author:all)
@@ -175,7 +195,9 @@ module Railbow
           RBW_SINCE=2mo RBW_VIEW=calendar rake db:migrate:status
           RBW_VIEW=tables RBW_GIT=author rake db:migrate:status
           RBW_GIT=author:me RBW_SINCE=3mo rake db:migrate:status
-          RBW_VIEW=ago rake db:migrate:status
+          RBW_DATE=rel rake db:migrate:status
+          RBW_DATE=short rake db:migrate:status
+          RBW_DATE=custom(%b\ %d,\ %Y) rake db:migrate:status
           RBW_GIT=diff rake db:migrate:status
           RBW_GIT=diff,base:develop rake db:migrate:status
           RBW_GIT=diff,mask:(WS-[^/]+)/ rake db:migrate:status
@@ -215,10 +237,11 @@ module Railbow
       author_mode = Railbow::Params.git_author
 
       calendar_enabled = Railbow::Params.view_calendar?
+      ticks_enabled = Railbow::Params.calendar_wticks?
       tables_enabled = Railbow::Params.view_tables?
       author_enabled = %w[all me].include?(author_mode)
       diff_enabled = Railbow::Params.git_diff?
-      ago_enabled = Railbow::Params.view_ago?
+      date_format = Railbow::Params.date_format
       nowrap_enabled = Railbow::Params.view_tables_nowrap?
       base_override = Railbow::Params.git_base
       branch_mask = Railbow::Params.git_mask
@@ -277,7 +300,9 @@ module Railbow
           base_branch = detect_default_branch(base_override)
           branch_origins = git_branch_migration_origins(migrate_dir, base_branch, branch_mask)
           uncommitted_files = git_uncommitted_migration_files(migrate_dir)
-          uncommitted_files.each { |f| branch_origins.delete(f) }
+          # Assign current branch as origin for uncommitted files
+          current_branch = current_branch_name(branch_mask)
+          uncommitted_files.each { |f| branch_origins[f] ||= current_branch }
         end
       end
 
@@ -285,9 +310,9 @@ module Railbow
       needs_name_truncation = tables_enabled || author_mode == "all" || diff_enabled
       name_col_width = needs_name_truncation ? 60 : nil
       table_columns = [
-        Railbow::Table::Column.new(label: "Status"),
+        Railbow::Table::Column.new(label: "Live", max_width: 5),
         Railbow::Table::Column.new(label: "Migration ID"),
-        Railbow::Table::Column.new(label: ago_enabled ? "Age" : "Created At"),
+        Railbow::Table::Column.new(label: date_format == "full" ? "Created At" : "Date"),
         Railbow::Table::Column.new(label: "Migration Name",
           max_width: name_col_width,
           truncate: needs_name_truncation)
@@ -299,8 +324,8 @@ module Railbow
       highlight_rows = Set.new
       rows = db_list.each_with_index.map do |(status, version, name), idx|
         colored_status = case status
-        when "up" then formatter.green_bold("up")
-        when "down" then formatter.yellow_bold("down")
+        when "up" then formatter.green_bold("\u2191\u2191")
+        when "down" then formatter.yellow_bold("\u2193\u2193")
         else status
         end
         display_name = name.include?("NO FILE") ? formatter.red("NO FILE") : name
@@ -308,10 +333,13 @@ module Railbow
         if diff_enabled && !name.include?("NO FILE")
           filepath = version_to_file[version.to_s]
           basename = filepath ? File.basename(filepath) : nil
-          diff_tag = if basename && uncommitted_files.include?(basename)
+
+          if basename && uncommitted_files.include?(basename)
             highlight_rows << idx
-            formatter.diff_tag_uncommitted
-          elsif basename && branch_origins.key?(basename)
+            colored_status = "#{colored_status} \e[38;5;220m\u25c6#{Railbow::Formatters::Base::RESET}"
+          end
+
+          diff_tag = if basename && branch_origins.key?(basename)
             formatter.diff_tag_branch(branch_origins[basename])
           end
 
@@ -325,7 +353,7 @@ module Railbow
           end
         end
 
-        created_at = ago_enabled ? formatter.format_relative_time(version) : formatter.format_timestamp(version)
+        created_at = formatter.format_date(version, date_format)
         row = [colored_status, version.to_s, created_at, display_name]
 
         if author_enabled
@@ -368,11 +396,33 @@ module Railbow
         end
       end
 
+      # Week tick separators: mark first row of each new ISO week
+      tick_rows = Set.new
+      if ticks_enabled
+        versions = db_list.map { |_, v, _| v.to_s }
+        prev_week = nil
+        versions.each_with_index do |v, i|
+          y = v[0..3].to_i
+          m = v[4..5].to_i
+          d = v[6..7].to_i
+          next if y == 0 || m == 0 || d == 0
+
+          week = Date.new(y, m, d).cweek
+
+          if i > 0 && prev_week && week != prev_week
+            tick_rows << i
+          end
+
+          prev_week = week
+        end
+      end
+
       renderer = Railbow::Table::Renderer.new(
         columns: table_columns,
         theme: Railbow::Table::Themes::WALLS
       )
-      puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows)
+      tick_col = 2 # Date column index
+      puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows, tick_rows: tick_rows, tick_col: tick_col)
     end
   end
 end
