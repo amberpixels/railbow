@@ -16,7 +16,7 @@ module Railbow
         @theme = theme
       end
 
-      def render(rows, separators: {}, highlight_rows: Set.new)
+      def render(rows, separators: {}, highlight_rows: Set.new, tick_rows: Set.new, tick_col: nil)
         return "" if columns.empty?
 
         # Pre-truncate non-last columns that have truncate + max_width
@@ -35,10 +35,14 @@ module Railbow
         lines = []
         lines << render_header(resolved)
         rows.each_with_index do |row, i|
+          tc = (tick_rows.include?(i) && tick_col) ? tick_col : nil
           if separators.key?(i) && theme.format_separator
-            lines << theme.format_separator.call(separators[i])
+            sep_row = Array.new(columns.size, "")
+            sep_row[1] = theme.format_separator.call(separators[i]) if columns.size > 1
+            lines << render_row(sep_row, resolved, tick_col: tc, tick_cross: true)
+            tc = nil # tick already shown on separator row
           end
-          formatted = render_row(row, resolved)
+          formatted = render_row(row, resolved, tick_col: tc)
           formatted = highlight_row_text(formatted) if highlight_rows.include?(i)
           lines << formatted
         end
@@ -80,10 +84,11 @@ module Railbow
         }.join(theme.header_col_separator)
       end
 
-      def render_row(row, widths)
+      def render_row(row, widths, tick_col: nil, tick_cross: false)
         last = columns.size - 1
         pad = theme.cell_padding
-        sep = theme.col_separator
+        default_sep = theme.col_separator
+        tick_sep = tick_cross ? theme.tick_cross_separator : theme.tick_separator
 
         prefix_parts = row[0...last].each_with_index.map { |cell, i|
           s = cell.to_s
@@ -92,16 +97,28 @@ module Railbow
           content = (columns[i].align == :right) ? "#{padding}#{s}" : "#{s}#{padding}"
           "#{pad}#{content}#{RESET}#{pad}"
         }
-        prefix = prefix_parts.join(sep)
+
+        # Join prefix parts with per-position separators
+        # Loop index i joins column i-1 and column i (separator_index = i-1)
+        # For tick_col, flanking separator indices are tick_col-1 and tick_col
+        prefix = prefix_parts.first.to_s
+        (1...prefix_parts.size).each do |i|
+          sep_idx = i - 1
+          sep = (tick_col && (sep_idx == tick_col - 1 || sep_idx == tick_col)) ? tick_sep : default_sep
+          prefix << "#{sep}#{prefix_parts[i]}"
+        end
 
         last_cell_raw = row[last].to_s
 
-        render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last)
+        # Separator before the last column has index (last - 1)
+        last_sep_idx = last - 1
+        last_sep = (tick_col && (last_sep_idx == tick_col - 1 || last_sep_idx == tick_col)) ? tick_sep : default_sep
+        render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: last_sep)
       end
 
-      def render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last)
+      def render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: nil)
         pad = theme.cell_padding
-        sep = theme.col_separator
+        sep = col_sep || theme.col_separator
 
         # Truncate if configured via column settings
         if columns[last].truncate && columns[last].max_width

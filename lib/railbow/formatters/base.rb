@@ -46,8 +46,7 @@ module Railbow
         TABLE_PALETTE[Zlib.crc32(table_name.to_s) % TABLE_PALETTE.size]
       end
 
-      def diff_tag_branch(name) = "\e[38;5;39m● #{name}#{RESET}"
-      def diff_tag_uncommitted = "\e[38;5;220m● new#{RESET}"
+      def diff_tag_branch(name) = "\e[38;5;39m\u2387 #{name}#{RESET}"
 
       def table_tag(table_name)
         color_code = table_color(table_name)
@@ -84,14 +83,7 @@ module Railbow
         end
       end
 
-      def format_timestamp(timestamp)
-        ts = timestamp.to_s
-        return ts if ts.length != 14
-
-        "#{ts[0..3]}-#{ts[4..5]}-#{ts[6..7]} #{ts[8..9]}:#{ts[10..11]}:#{ts[12..13]}"
-      end
-
-      def format_relative_time(timestamp)
+      def format_date(timestamp, mode = "full")
         ts = timestamp.to_s
         return ts if ts.length != 14
 
@@ -99,6 +91,24 @@ module Railbow
           ts[0..3].to_i, ts[4..5].to_i, ts[6..7].to_i,
           ts[8..9].to_i, ts[10..11].to_i, ts[12..13].to_i
         )
+
+        case mode
+        when "full"
+          time.strftime("%Y-%m-%d %H:%M:%S")
+        when "rel"
+          format_relative_time_from(time)
+        when "short"
+          time.strftime("%b %-d")
+        when /\Acustom\((.+)\)\z/
+          time.strftime($1)
+        else
+          time.strftime("%Y-%m-%d %H:%M:%S")
+        end
+      end
+
+      private
+
+      def format_relative_time_from(time)
         diff = Time.now - time
         return "just now" if diff < 0
 
@@ -118,6 +128,8 @@ module Railbow
         else "~#{years}y ago"
         end
       end
+
+      public
 
       def truncate_str(str, max_width)
         return str if display_width(strip_ansi(str)) <= max_width

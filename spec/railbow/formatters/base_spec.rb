@@ -23,18 +23,30 @@ RSpec.describe Railbow::Formatters::Base do
     end
   end
 
-  describe "#format_timestamp" do
-    it "formats a 14-char timestamp into readable form" do
-      expect(formatter.format_timestamp("20240711185212")).to eq("2024-07-11 18:52:12")
+  describe "#format_date" do
+    it "formats full mode (default)" do
+      expect(formatter.format_date("20240711185212", "full")).to eq("2024-07-11 18:52:12")
+    end
+
+    it "formats short mode" do
+      expect(formatter.format_date("20260130120854", "short")).to eq("Jan 30")
+    end
+
+    it "formats rel mode" do
+      result = formatter.format_date("20240711185212", "rel")
+      expect(result).to match(/ago|just now/)
+    end
+
+    it "formats custom strftime" do
+      expect(formatter.format_date("20260130120854", "custom(%b %d, %Y)")).to eq("Jan 30, 2026")
     end
 
     it "returns non-14-char strings as-is" do
-      expect(formatter.format_timestamp("short")).to eq("short")
-      expect(formatter.format_timestamp("********")).to eq("********")
+      expect(formatter.format_date("short", "full")).to eq("short")
     end
 
-    it "handles integer input" do
-      expect(formatter.format_timestamp(20240711185212)).to eq("2024-07-11 18:52:12")
+    it "defaults mode to full" do
+      expect(formatter.format_date("20240711185212")).to eq("2024-07-11 18:52:12")
     end
   end
 

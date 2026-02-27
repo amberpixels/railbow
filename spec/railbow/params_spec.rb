@@ -13,6 +13,8 @@ RSpec.describe Railbow::Params do
     ENV.delete("RBW_VERB")
     ENV.delete("RBW_GIT")
     ENV.delete("RBW_VIEW")
+    ENV.delete("RBW_DATE")
+    ENV.delete("RBW_CALENDAR")
   end
 
   describe ".parse_compound" do
@@ -171,10 +173,35 @@ RSpec.describe Railbow::Params do
     end
   end
 
+  describe ".date_format" do
+    it "defaults to 'full'" do
+      expect(described_class.date_format).to eq("full")
+    end
+
+    it "reads RBW_DATE=rel" do
+      ENV["RBW_DATE"] = "rel"
+      expect(described_class.date_format).to eq("rel")
+    end
+
+    it "reads RBW_DATE=short" do
+      ENV["RBW_DATE"] = "short"
+      expect(described_class.date_format).to eq("short")
+    end
+
+    it "reads RBW_DATE=custom(%b %d)" do
+      ENV["RBW_DATE"] = "custom(%b %d)"
+      expect(described_class.date_format).to eq("custom(%b %d)")
+    end
+
+    it "returns unknown values as-is" do
+      ENV["RBW_DATE"] = "custom(%b %d, %Y)"
+      expect(described_class.date_format).to eq("custom(%b %d, %Y)")
+    end
+  end
+
   describe "view compound accessors" do
     it "defaults all view options to false" do
       expect(described_class.view_calendar?).to be false
-      expect(described_class.view_ago?).to be false
       expect(described_class.view_tables?).to be false
       expect(described_class.view_tables_nowrap?).to be false
     end
@@ -183,12 +210,6 @@ RSpec.describe Railbow::Params do
       ENV["RBW_VIEW"] = "calendar"
 
       expect(described_class.view_calendar?).to be true
-    end
-
-    it "parses ago" do
-      ENV["RBW_VIEW"] = "ago"
-
-      expect(described_class.view_ago?).to be true
     end
 
     it "parses tables" do
@@ -212,11 +233,32 @@ RSpec.describe Railbow::Params do
     end
 
     it "parses combined view options" do
-      ENV["RBW_VIEW"] = "calendar,ago,tables"
+      ENV["RBW_VIEW"] = "calendar,tables"
 
       expect(described_class.view_calendar?).to be true
-      expect(described_class.view_ago?).to be true
       expect(described_class.view_tables?).to be true
+    end
+  end
+
+  describe "calendar compound accessors" do
+    it "defaults calendar_wticks? to false" do
+      expect(described_class.calendar_wticks?).to be false
+    end
+
+    it "remains false with calendar but no wticks" do
+      ENV["RBW_VIEW"] = "calendar"
+      expect(described_class.calendar_wticks?).to be false
+    end
+
+    it "enables wticks with RBW_CALENDAR=wticks" do
+      ENV["RBW_VIEW"] = "calendar"
+      ENV["RBW_CALENDAR"] = "wticks"
+      expect(described_class.calendar_wticks?).to be true
+    end
+
+    it "requires calendar mode for wticks" do
+      ENV["RBW_CALENDAR"] = "wticks"
+      expect(described_class.calendar_wticks?).to be false
     end
   end
 

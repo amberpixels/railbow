@@ -101,6 +101,15 @@ module Railbow
       val.is_a?(String) ? val : ""
     end
 
+    # --- RBW_DATE ---
+
+    def date_format
+      val = ENV["RBW_DATE"]
+      return "full" if val.nil? || val.strip.empty?
+
+      val.strip
+    end
+
     # --- Compound: RBW_VIEW ---
 
     def view
@@ -111,16 +120,24 @@ module Railbow
       view["calendar"] == true
     end
 
-    def view_ago?
-      view["ago"] == true
-    end
-
     def view_tables?
       !view["tables"].nil?
     end
 
     def view_tables_nowrap?
       view["tables"] == "nowrap" || view["nowrap"] == true
+    end
+
+    # --- Compound: RBW_CALENDAR ---
+
+    def calendar
+      parse_compound(ENV["RBW_CALENDAR"])
+    end
+
+    def calendar_wticks?
+      return false unless view_calendar?
+
+      calendar["wticks"] == true
     end
   end
 end
