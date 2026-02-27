@@ -71,10 +71,10 @@ RSpec.describe Railbow::RoutesFormatter do
   end
 
   before do
-    ENV.delete("HELP")
-    ENV.delete("VERB")
-    ENV.delete("COMPACT")
-    ENV.delete("PLAIN")
+    ENV.delete("RBW_HELP")
+    ENV.delete("RBW_VERB")
+    ENV.delete("RBW_COMPACT")
+    ENV.delete("RBW_PLAIN")
     ENV.delete("NO_COLOR")
     ENV.delete("CLAUDECODE")
     ENV.delete("CI")
@@ -243,8 +243,8 @@ RSpec.describe Railbow::RoutesFormatter do
       expect(plain).to include("/users")
     end
 
-    it "keeps (.:format) when COMPACT=0" do
-      ENV["COMPACT"] = "0"
+    it "keeps (.:format) when RBW_COMPACT=0" do
+      ENV["RBW_COMPACT"] = "0"
       routes = [{name: "users", verb: "GET", path: "/users(.:format)", reqs: "users#index"}]
       formatter.section(routes)
       plain = strip_ansi(formatter.result)
@@ -319,7 +319,7 @@ RSpec.describe Railbow::RoutesFormatter do
     end
 
     it "filters to a single verb" do
-      ENV["VERB"] = "GET"
+      ENV["RBW_VERB"] = "GET"
 
       formatter.section(mixed_routes)
       result = strip_ansi(formatter.result)
@@ -329,7 +329,7 @@ RSpec.describe Railbow::RoutesFormatter do
     end
 
     it "filters to multiple verbs" do
-      ENV["VERB"] = "POST,PUT"
+      ENV["RBW_VERB"] = "POST,PUT"
 
       formatter.section(mixed_routes)
       result = strip_ansi(formatter.result)
@@ -338,8 +338,8 @@ RSpec.describe Railbow::RoutesFormatter do
       expect(result).not_to include("DELETE")
     end
 
-    it "shows all routes when VERB=ALL" do
-      ENV["VERB"] = "ALL"
+    it "shows all routes when RBW_VERB=ALL" do
+      ENV["RBW_VERB"] = "ALL"
 
       formatter.section(mixed_routes)
       result = strip_ansi(formatter.result)
@@ -349,7 +349,7 @@ RSpec.describe Railbow::RoutesFormatter do
     end
 
     it "is case-insensitive" do
-      ENV["VERB"] = "get"
+      ENV["RBW_VERB"] = "get"
 
       formatter.section(mixed_routes)
       result = strip_ansi(formatter.result)
@@ -358,7 +358,7 @@ RSpec.describe Railbow::RoutesFormatter do
     end
 
     it "matches multi-verb routes if any verb matches" do
-      ENV["VERB"] = "POST"
+      ENV["RBW_VERB"] = "POST"
 
       routes = [
         {name: "root", verb: "GET|POST", path: "/", reqs: "home#index"},
@@ -374,22 +374,22 @@ RSpec.describe Railbow::RoutesFormatter do
   describe "HELP feature" do
     before { allow($stdout).to receive(:tty?).and_return(true) }
 
-    it "shows help text when HELP=1" do
-      ENV["HELP"] = "1"
+    it "shows help text when RBW_HELP=1" do
+      ENV["RBW_HELP"] = "1"
       formatter.section(sample_routes)
       result = formatter.result
       expect(result).to include("Railbow Routes Options")
-      expect(result).to include("VERB=GET")
-      expect(result).to include("COMPACT")
-      expect(result).to include("PLAIN=1")
+      expect(result).to include("RBW_VERB=GET")
+      expect(result).to include("RBW_COMPACT")
+      expect(result).to include("RBW_PLAIN=1")
     end
   end
 
   describe "plain mode (formatting disabled)" do
     before { allow($stdout).to receive(:tty?).and_return(true) }
 
-    it "falls back to Rails output when PLAIN=1" do
-      ENV["PLAIN"] = "1"
+    it "falls back to Rails output when RBW_PLAIN=1" do
+      ENV["RBW_PLAIN"] = "1"
       formatter.section(sample_routes)
       result = formatter.result
       expect(result).not_to include("\e[")

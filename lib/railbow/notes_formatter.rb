@@ -33,16 +33,16 @@ module Railbow
     def display(results, options = {})
       return super if Railbow.plain?
 
-      if ENV["HELP"] == "1"
+      if Railbow::Params.help?
         print_help
         return
       end
 
-      author_mode = ENV.fetch("AUTHOR", "off").strip.downcase
-      since_val = ENV.fetch("SINCE", "all").strip.downcase
-      sort_mode = ENV.fetch("SORT", "file").strip.downcase
+      author_mode = Railbow::Params.git_author
+      since_val = Railbow::Params.since
+      sort_mode = Railbow::Params.sort
 
-      since_date = parse_since(since_val)
+      since_date = Railbow::Params.parse_since(since_val, context: "annotations")
       git_needed = %w[all me].include?(author_mode) || since_date || sort_mode == "date"
 
       # Build blame cache for all files if git features are needed
@@ -233,26 +233,6 @@ module Railbow
       result
     end
 
-    def parse_since(value)
-      return nil if value.nil? || value.strip.downcase == "all"
-
-      match = value.strip.match(/^(\d+)(d|w|mo|m|y)$/i)
-      unless match
-        warn "  Warning: unrecognized SINCE=#{value}, showing all annotations"
-        return nil
-      end
-
-      amount = match[1].to_i
-      unit = match[2].downcase
-
-      case unit
-      when "d" then Date.today - amount
-      when "w" then Date.today - (amount * 7)
-      when "mo", "m" then Date.today.prev_month(amount)
-      when "y" then Date.today.prev_year(amount)
-      end
-    end
-
     def current_git_email
       output, _status = Open3.capture2("git", "config", "user.email")
       output.strip.downcase
@@ -265,35 +245,35 @@ module Railbow
         Enhanced rails notes
 
         \e[1mUsage:\e[0m
-          [ENV_VAR=value ...] rails notes
+          [RBW_*=value ...] rails notes
 
         \e[1mOptions:\e[0m
-          AUTHOR=<mode>      Show annotation authors from git blame
-                             off  — disabled (default, no git calls)
-                             all  — show author + date on each annotation
-                             me   — highlight your own annotations
+          RBW_GIT=<options>        Git integration (comma-separated):
+                                   author     — show all authors (same as author:all)
+                                   author:all — show author + date on each annotation
+                                   author:me  — highlight your own annotations
 
-          SINCE=<period>     Filter annotations by blame date (default: all)
-                             Values: all, 2mo, 1w, 30d, 1y, etc.
-                             Units: d (days), w (weeks), mo/m (months), y (years)
+          RBW_SINCE=<period>       Filter annotations by blame date (default: all)
+                                   Values: all, 2mo, 1w, 30d, 1y, etc.
+                                   Units: d (days), w (weeks), mo/m (months), y (years)
 
-          SORT=<mode>        Sort order (default: file)
-                             file — group by file (default Rails order)
-                             date — sort by blame date (newest first)
+          RBW_SORT=<mode>          Sort order (default: file)
+                                   file — group by file (default Rails order)
+                                   date — sort by blame date (newest first)
 
-          PLAIN=1            Disable Railbow formatting (plain Rails output)
+          RBW_PLAIN=1              Disable Railbow formatting (plain Rails output)
 
-          HELP=1             Show this help message
+          RBW_HELP=1               Show this help message
 
         \e[2mAuto-disabled when piped, in CI, or when called by an LLM agent.\e[0m
 
         \e[1mExamples:\e[0m
           rails notes
-          AUTHOR=all rails notes
-          AUTHOR=me rails notes
-          SINCE=1mo AUTHOR=all rails notes
-          SORT=date AUTHOR=all rails notes
-          SINCE=2w AUTHOR=me SORT=date rails notes
+          RBW_GIT=author rails notes
+          RBW_GIT=author:me rails notes
+          RBW_SINCE=1mo RBW_GIT=author rails notes
+          RBW_SORT=date RBW_GIT=author rails notes
+          RBW_SINCE=2w RBW_GIT=author:me RBW_SORT=date rails notes
 
       HELP
     end
