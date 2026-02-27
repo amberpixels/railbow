@@ -22,20 +22,20 @@ module Railbow
 
       #{BOLD}Railbow Routes Options:#{RESET}
 
-        #{CYAN}VERB=GET#{RESET}          Show only GET routes
-        #{CYAN}VERB=POST,PUT#{RESET}     Show only POST and PUT routes
-        #{CYAN}COMPACT=0#{RESET}         Keep (.:format) suffixes
-        #{CYAN}PLAIN=1#{RESET}           Disable Railbow formatting (plain Rails output)
-        #{CYAN}HELP=1#{RESET}            Show this help message
+        #{CYAN}RBW_VERB=GET#{RESET}          Show only GET routes
+        #{CYAN}RBW_VERB=POST,PUT#{RESET}     Show only POST and PUT routes
+        #{CYAN}RBW_COMPACT=0#{RESET}         Keep (.:format) suffixes
+        #{CYAN}RBW_PLAIN=1#{RESET}           Disable Railbow formatting (plain Rails output)
+        #{CYAN}RBW_HELP=1#{RESET}            Show this help message
 
       #{DIM}Auto-disabled when piped, in CI, or when called by an LLM agent.#{RESET}
-      #{DIM}Example: VERB=GET rails routes#{RESET}
+      #{DIM}Example: RBW_VERB=GET rails routes#{RESET}
 
     HELP
 
     def section_title(title)
       return super unless tty?
-      return if ENV["HELP"] == "1"
+      return if Railbow::Params.help?
 
       @buffer << "\n#{BOLD}#{CYAN}#{title}:#{RESET}"
     end
@@ -47,7 +47,7 @@ module Railbow
     def section(routes)
       return super unless tty?
 
-      if ENV["HELP"] == "1"
+      if Railbow::Params.help?
         unless @help_shown
           @buffer << HELP_TEXT_COLOR
           @help_shown = true
@@ -73,7 +73,7 @@ module Railbow
     end
 
     def filter_by_verb(routes)
-      verb_filter = ENV["VERB"]
+      verb_filter = Railbow::Params.verb
       return routes if verb_filter.nil? || verb_filter.strip.empty? || verb_filter.strip.upcase == "ALL"
 
       allowed = verb_filter.split(",").map { |v| v.strip.upcase }
@@ -113,7 +113,7 @@ module Railbow
     end
 
     def compact_mode?
-      ENV["COMPACT"] != "0"
+      Railbow::Params.compact != "0"
     end
 
     def colorize_verb(verb)

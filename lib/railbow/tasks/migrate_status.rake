@@ -135,26 +135,6 @@ module Railbow
       result
     end
 
-    def parse_since(value)
-      return nil if value.nil? || value.strip.downcase == "all"
-
-      match = value.strip.match(/^(\d+)(d|w|mo|m|y)$/i)
-      unless match
-        warn "  Warning: unrecognized SINCE=#{value}, showing all migrations"
-        return nil
-      end
-
-      amount = match[1].to_i
-      unit = match[2].downcase
-
-      case unit
-      when "d" then Date.today - amount
-      when "w" then Date.today - (amount * 7)
-      when "mo", "m" then Date.today.prev_month(amount)
-      when "y" then Date.today.prev_year(amount)
-      end
-    end
-
     def print_help
       Railbow.print_logo
       puts <<~HELP
@@ -162,46 +142,43 @@ module Railbow
         Enhanced db:migrate:status
 
         \e[1mUsage:\e[0m
-          [ENV_VAR=value ...] rake db:migrate:status
+          [RBW_*=value ...] rake db:migrate:status
 
         \e[1mOptions:\e[0m
-          SINCE=<period>     Filter migrations by age (default: all)
-                             Values: all, 2mo, 1w, 30d, 1y, etc.
-                             Units: d (days), w (weeks), mo/m (months), y (years)
+          RBW_SINCE=<period>       Filter migrations by age (default: all)
+                                   Values: all, 2mo, 1w, 30d, 1y, etc.
+                                   Units: d (days), w (weeks), mo/m (months), y (years)
 
-          CALENDAR=1         Show month/year separator lines between groups
+          RBW_VIEW=<options>       Display options (comma-separated):
+                                   calendar   — show month/year separator lines
+                                   tables     — parse migration files, show Tables column
+                                   tables:nowrap — truncate Tables column instead of wrapping
+                                   ago        — show relative timestamps (~3d ago)
 
-          TABLES=1           Parse migration files and show a Tables column
-                             with colored tags for each referenced table
-          NOWRAP=1           Truncate the Tables column instead of wrapping
+          RBW_GIT=<options>        Git integration (comma-separated):
+                                   author     — add an Author column (same as author:all)
+                                   author:all — add an Author column
+                                   author:me  — highlight your own migrations
+                                   diff       — tag migrations by git origin
+                                   base:<branch> — base branch for diff (default: auto-detected)
+                                   mask:<re>  — regex to extract branch label
+                                                e.g. mask:(WS-[^/]+)/
 
-          AUTHOR=<mode>      Show migration file authors from git history
-                             off  — disabled (default)
-                             all  — add an Author column
-                             me   — highlight your own migrations (via git config user.name)
+          RBW_PLAIN=1              Disable Railbow formatting (plain Rails output)
 
-          AGO=1              Show relative timestamps instead of absolute (e.g. ~3d ago)
-
-          DIFF=1             Tag migrations by git origin (branch vs uncommitted)
-          BASE=<branch>      Base branch for DIFF comparison (default: auto-detected)
-          BRANCH_MASK=<re>   Regex with capture group to extract branch label
-                             e.g. BRANCH_MASK='(WS-[^/]+)/' for ws-1234/foo → ws-1234
-
-          PLAIN=1            Disable Railbow formatting (plain Rails output)
-
-          HELP=1             Show this help message
+          RBW_HELP=1               Show this help message
 
         \e[2mAuto-disabled when piped, in CI, or when called by an LLM agent.\e[0m
 
         \e[1mExamples:\e[0m
           rake db:migrate:status
-          SINCE=2mo CALENDAR=1 rake db:migrate:status
-          TABLES=1 AUTHOR=all rake db:migrate:status
-          AUTHOR=me SINCE=3mo rake db:migrate:status
-          AGO=1 rake db:migrate:status
-          DIFF=1 rake db:migrate:status
-          DIFF=1 BASE=develop rake db:migrate:status
-          DIFF=1 BRANCH_MASK='(WS-[^/]+)/' rake db:migrate:status
+          RBW_SINCE=2mo RBW_VIEW=calendar rake db:migrate:status
+          RBW_VIEW=tables RBW_GIT=author rake db:migrate:status
+          RBW_GIT=author:me RBW_SINCE=3mo rake db:migrate:status
+          RBW_VIEW=ago rake db:migrate:status
+          RBW_GIT=diff rake db:migrate:status
+          RBW_GIT=diff,base:develop rake db:migrate:status
+          RBW_GIT=diff,mask:(WS-[^/]+)/ rake db:migrate:status
 
       HELP
     end
@@ -211,7 +188,7 @@ module Railbow
     def migrate_status
       return super if Railbow.plain?
 
-      if ENV["HELP"] == "1"
+      if Railbow::Params.help?
         print_help
         return
       end
@@ -233,27 +210,21 @@ module Railbow
         return
       end
 
-      # Options from ENV
-      since_value = ENV.fetch("SINCE", "all")
-      show_calendar = ENV.fetch("CALENDAR", "0")
-      show_tables = ENV.fetch("TABLES", "0")
-      author_mode = ENV.fetch("AUTHOR", "off").strip.downcase
+      # Options from Railbow::Params
+      since_value = Railbow::Params.since
+      author_mode = Railbow::Params.git_author
 
-      diff_value = ENV.fetch("DIFF", "0")
-      base_override = ENV.fetch("BASE", "").strip
-      branch_mask = ENV.fetch("BRANCH_MASK", "").strip
-      ago_value = ENV.fetch("AGO", "0")
-      nowrap_value = ENV.fetch("NOWRAP", "0")
-
-      calendar_enabled = %w[1 true yes on].include?(show_calendar.strip.downcase)
-      tables_enabled = %w[1 true yes on].include?(show_tables.strip.downcase)
+      calendar_enabled = Railbow::Params.view_calendar?
+      tables_enabled = Railbow::Params.view_tables?
       author_enabled = %w[all me].include?(author_mode)
-      diff_enabled = %w[1 true yes on].include?(diff_value.strip.downcase)
-      ago_enabled = %w[1 true yes on].include?(ago_value.strip.downcase)
-      nowrap_enabled = %w[1 true yes on].include?(nowrap_value.strip.downcase)
+      diff_enabled = Railbow::Params.git_diff?
+      ago_enabled = Railbow::Params.view_ago?
+      nowrap_enabled = Railbow::Params.view_tables_nowrap?
+      base_override = Railbow::Params.git_base
+      branch_mask = Railbow::Params.git_mask
 
       # Filter by SINCE period (default: all)
-      since_cutoff = parse_since(since_value)
+      since_cutoff = Railbow::Params.parse_since(since_value, context: "migrations")
       if since_cutoff
         total_count = db_list.size
         cutoff_version = since_cutoff.strftime("%Y%m%d%H%M%S").to_i
