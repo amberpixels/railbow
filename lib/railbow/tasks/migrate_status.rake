@@ -109,13 +109,31 @@ module Railbow
         branches = branches_out.each_line.map(&:strip).reject(&:empty?)
         next if branches.empty?
 
-        # Pick the branch whose tip is closest to the adding commit
+        # Pick the branch that originally introduced the commit.
+        # 1. Filter out child branches: if branch A is an ancestor of branch B,
+        #    the commit was introduced in A, not B.
+        # 2. Among remaining, prefer the branch with the MOST commits after the
+        #    adding commit — it has been active longer since the commit was made,
+        #    indicating it is the original branch (not a newer fork).
         best = if branches.size == 1
           branches.first
         else
-          branches.min_by do |b|
-            count_out, _ = Open3.capture2("git", "rev-list", "--count", "#{commit}..#{b}")
-            count_out.strip.to_i
+          filtered = branches.reject do |b|
+            branches.any? do |other|
+              next false if other == b
+              _, st = Open3.capture2("git", "merge-base", "--is-ancestor", other, b)
+              st.success?
+            end
+          end
+          filtered = branches if filtered.empty?
+
+          if filtered.size == 1
+            filtered.first
+          else
+            filtered.max_by do |b|
+              count_out, _ = Open3.capture2("git", "rev-list", "--count", "#{commit}..#{b}")
+              count_out.strip.to_i
+            end
           end
         end
 
