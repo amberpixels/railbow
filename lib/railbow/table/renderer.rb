@@ -130,6 +130,13 @@ module Railbow
         prefix_width = compute_prefix_width(widths, last)
         last_col_max = term_w ? [term_w - prefix_width, 10].max : nil
 
+        # Use custom truncate_fn if available (e.g. table tags with +N)
+        if columns[last].truncate_fn && last_col_max &&
+            display_width(last_cell_plain) > last_col_max
+          last_cell_raw = columns[last].truncate_fn.call(last_cell_raw, last_col_max)
+          return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
+        end
+
         # Truncate to terminal width (by whole words) instead of wrapping
         if columns[last].truncate && !columns[last].max_width && last_col_max &&
             display_width(last_cell_plain) > last_col_max

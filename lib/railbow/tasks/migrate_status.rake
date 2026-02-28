@@ -336,7 +336,10 @@ module Railbow
           truncate: needs_name_truncation)
       ]
       table_columns << Railbow::Table::Column.new(label: "Author") if author_mode == "all"
-      table_columns << Railbow::Table::Column.new(label: "Tables", truncate: nowrap_enabled) if tables_enabled
+      if tables_enabled
+        tables_truncate_fn = ->(cell_raw, max_w) { formatter.table_tags_fitted(cell_raw, max_w) }
+        table_columns << Railbow::Table::Column.new(label: "Tables", truncate: nowrap_enabled, truncate_fn: tables_truncate_fn)
+      end
 
       # Build rows and track highlight indices for AUTHOR=me
       highlight_rows = Set.new
