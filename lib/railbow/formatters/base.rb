@@ -59,6 +59,36 @@ module Railbow
         table_names.map { |t| table_tag(t) }.join(" ")
       end
 
+      # Re-fits a pre-formatted table_tags string within max_width,
+      # showing full table names and "+N" for overflow.
+      # Accepts the full formatted string (with ANSI) and splits it into segments.
+      def table_tags_fitted(formatted_str, max_width)
+        return formatted_str if formatted_str.nil? || formatted_str.empty?
+
+        # Split into individual tag segments: each is "\e[38;5;NNNm● name\e[0m"
+        segments = formatted_str.scan(/\e\[38;5;\d+m● [^\e]+\e\[0m/)
+        return formatted_str if segments.empty?
+
+        total = segments.size
+        plain_segments = segments.map { |s| strip_ansi(s) }
+
+        # Try fitting all tags
+        return formatted_str if display_width(plain_segments.join(" ")) <= max_width
+
+        # Try fitting progressively fewer tags with +N suffix
+        (total - 1).downto(1) do |count|
+          remaining = total - count
+          suffix = " +#{remaining}"
+          candidate = plain_segments[0...count].join(" ") + suffix
+          if display_width(candidate) <= max_width
+            return segments[0...count].join(" ") + suffix
+          end
+        end
+
+        # Just +N
+        "+#{total}"
+      end
+
       def format_timing(seconds)
         milliseconds = (seconds * 1000).round(1)
 
