@@ -42,8 +42,7 @@ module Railbow
             lines << render_row(sep_row, resolved, tick_col: tc, tick_cross: true)
             tc = nil # tick already shown on separator row
           end
-          formatted = render_row(row, resolved, tick_col: tc)
-          formatted = highlight_row_text(formatted) if highlight_rows.include?(i)
+          formatted = render_row(row, resolved, tick_col: tc, highlight: highlight_rows.include?(i))
           lines << formatted
         end
         lines.join("\n")
@@ -84,7 +83,7 @@ module Railbow
         }.join(theme.header_col_separator)
       end
 
-      def render_row(row, widths, tick_col: nil, tick_cross: false)
+      def render_row(row, widths, tick_col: nil, tick_cross: false, highlight: false)
         last = columns.size - 1
         pad = theme.cell_padding
         default_sep = theme.col_separator
@@ -95,6 +94,7 @@ module Railbow
           cell_w = display_width(strip_ansi(s))
           padding = " " * [widths[i] - cell_w, 0].max
           content = (columns[i].align == :right) ? "#{padding}#{s}" : "#{s}#{padding}"
+          content = "#{WHITE}#{content}#{RESET}" if highlight
           "#{pad}#{content}#{RESET}#{pad}"
         }
 
@@ -113,10 +113,10 @@ module Railbow
         # Separator before the last column has index (last - 1)
         last_sep_idx = last - 1
         last_sep = (tick_col && (last_sep_idx == tick_col - 1 || last_sep_idx == tick_col)) ? tick_sep : default_sep
-        render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: last_sep)
+        render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: last_sep, highlight: highlight)
       end
 
-      def render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: nil)
+      def render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: nil, highlight: false)
         pad = theme.cell_padding
         sep = col_sep || theme.col_separator
 
@@ -134,6 +134,7 @@ module Railbow
         if columns[last].truncate_fn && last_col_max &&
             display_width(last_cell_plain) > last_col_max
           last_cell_raw = columns[last].truncate_fn.call(last_cell_raw, last_col_max)
+          last_cell_raw = "#{WHITE}#{last_cell_raw}#{RESET}" if highlight
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
@@ -141,8 +142,11 @@ module Railbow
         if columns[last].truncate && !columns[last].max_width && last_col_max &&
             display_width(last_cell_plain) > last_col_max
           last_cell_raw = truncate_by_words(last_cell_raw, last_col_max)
+          last_cell_raw = "#{WHITE}#{last_cell_raw}#{RESET}" if highlight
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
+
+        last_cell_raw = "#{WHITE}#{last_cell_raw}#{RESET}" if highlight
 
         if last_col_max && display_width(strip_ansi(last_cell_raw)) > last_col_max
           blank_prefix = prefix_parts.map { |part|
@@ -170,13 +174,6 @@ module Railbow
         # Plus pad on last column
         total += pad_w
         total
-      end
-
-      def highlight_row_text(str)
-        str
-          .gsub(RESET, "#{RESET}#{WHITE}")
-          .gsub("\u2502", "#{RESET}\u2502#{WHITE}")
-          .then { |s| "#{WHITE}#{s}#{RESET}" }
       end
 
       def truncate_str(str, max_width)
