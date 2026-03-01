@@ -139,5 +139,9 @@ module Railbow
 
       calendar["wticks"] == true
     end
+
+    def calendar_label
+      calendar["label"] || "%b %Y   W%V"
+    end
   end
 end

@@ -37,7 +37,7 @@ module Railbow
           "#{BG_PURPLE}#{BOLD}#{WHITE}#{text}#{RESET}"
         },
         format_separator: ->(label) {
-          "#{DIM}\u2500#{RESET} #{PURPLE}#{label}#{RESET} #{DIM}\u2500#{RESET}"
+          "#{PURPLE}#{label}#{RESET}"
         }
       )
 
