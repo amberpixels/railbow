@@ -192,6 +192,8 @@ module Railbow
 
           RBW_CALENDAR=<options>  Calendar sub-options (requires RBW_VIEW=calendar):
                                    wticks     — show week tick marks on date column
+                                   label:<fmt> — strftime format for month separator
+                                                (default: %b %Y   W%V)
 
           RBW_GIT=<options>        Git integration (comma-separated):
                                    author     — add an Author column (same as author:all)
@@ -404,14 +406,15 @@ module Railbow
       if calendar_enabled
         versions = db_list.map { |_, v, _| v.to_s }
         month_keys = versions.map { |v| v[0..5] }
+        calendar_label_fmt = Railbow::Params.calendar_label
 
         if month_keys.uniq.size > 1
           month_keys.each_with_index do |mk, i|
             next if i == 0
             if mk != month_keys[i - 1]
-              year = mk[0..3]
-              month_name = Date::ABBR_MONTHNAMES[mk[4..5].to_i]
-              separators[i] = "#{month_name} #{year}"
+              v = versions[i]
+              date = Date.new(v[0..3].to_i, v[4..5].to_i, v[6..7].to_i)
+              separators[i] = date.strftime(calendar_label_fmt)
             end
           end
         end
