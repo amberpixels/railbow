@@ -183,7 +183,7 @@ RSpec.describe Railbow::Table::Renderer do
   end
 
   describe "highlight_rows" do
-    it "wraps highlighted rows in WHITE" do
+    it "wraps highlighted cell content in WHITE without affecting separators" do
       columns = [
         Railbow::Table::Column.new(label: "Name"),
         Railbow::Table::Column.new(label: "Val")
@@ -193,10 +193,17 @@ RSpec.describe Railbow::Table::Renderer do
       result = renderer.render(rows, highlight_rows: Set[0])
       lines = result.split("\n")
 
-      # Highlighted row should start with WHITE
-      expect(lines[1]).to start_with("\e[97m")
-      # Non-highlighted row should not
-      expect(lines[2]).not_to start_with("\e[97m")
+      # Highlighted row should contain WHITE around cell content
+      expect(lines[1]).to include("\e[97m")
+      # Each WHITE section should be closed by RESET before separator
+      # The separator │ should appear between RESET sequences, not inside WHITE
+      plain_parts = lines[1].split("\u2502")
+      plain_parts.each do |part|
+        # No unclosed WHITE at the boundary — each part ends with RESET
+        expect(part).to end_with("\e[0m ") | end_with("\e[0m") | end_with(" ")
+      end
+      # Non-highlighted row should not contain WHITE
+      expect(lines[2]).not_to include("\e[97m")
     end
   end
 
