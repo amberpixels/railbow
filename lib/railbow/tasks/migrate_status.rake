@@ -15,7 +15,7 @@ module Railbow
 
     def git_migration_authors(migrate_dir)
       output, _status = Open3.capture2(
-        "git", "log", "--format=COMMIT:%aN\t%aE", "--diff-filter=A", "--name-only", "--", migrate_dir
+        "git", "log", "--format=COMMIT:%aN\t%aE", "--diff-filter=AR", "--name-status", "--", migrate_dir
       )
       return {names: {}, emails: {}} if output.empty?
 
@@ -30,7 +30,17 @@ module Railbow
           current_name = parts[0]
           current_email = parts[1]&.downcase
         elsif !line.empty? && current_name
-          basename = File.basename(line)
+          # --name-status lines: "A\tfilepath" or "Rnnn\told\tnew"
+          cols = line.split("\t")
+          status_code = cols[0]
+          if status_code&.start_with?("R")
+            # Renamed: map the destination (new) filename to the author
+            filepath = cols[2]
+          else
+            filepath = cols[1]
+          end
+          next unless filepath
+          basename = File.basename(filepath)
           names[basename] ||= current_name
           emails[basename] ||= current_email
         end
@@ -83,19 +93,22 @@ module Railbow
 
       merge_base = merge_base_out.strip
       diff_out, diff_status = Open3.capture2(
-        "git", "diff", "--name-only", "--diff-filter=A", merge_base, "HEAD", "--", migrate_dir
+        "git", "diff", "--name-status", "--diff-filter=AR", merge_base, "HEAD", "--", migrate_dir
       )
       return {} unless diff_status.success?
 
-      files = diff_out.each_line.map(&:strip).reject(&:empty?)
+      files = diff_out.each_line.map { |l|
+        cols = l.strip.split("\t")
+        cols[0]&.start_with?("R") ? cols[2] : cols[1]
+      }.compact.reject(&:empty?)
       origins = {}
 
       files.each do |filepath|
         basename = File.basename(filepath)
 
-        # Find the commit that added this file
+        # Find the commit that added or renamed this file
         commit_out, cs = Open3.capture2(
-          "git", "log", "--diff-filter=A", "--format=%H", "-1", "--", filepath
+          "git", "log", "--diff-filter=AR", "--format=%H", "-1", "--", filepath
         )
         next unless cs.success?
         commit = commit_out.strip
@@ -306,7 +319,7 @@ module Railbow
           author_names = result[:names]
           author_emails = result[:emails]
         end
-        git_email = current_git_email if author_mode == "me"
+        git_email = current_git_email
         git_name = current_git_name if author_mode == "all"
       end
 
@@ -387,6 +400,10 @@ module Railbow
           if author_mode == "all"
             author = basename ? author_names[basename] : nil
             row << (author || (basename ? git_name : ""))
+            if git_email
+              email = author_emails[basename]
+              highlight_rows << idx if email.nil? || email == git_email
+            end
           elsif author_mode == "me" && basename && git_email
             email = author_emails[basename]
             highlight_rows << idx if email.nil? || email == git_email
