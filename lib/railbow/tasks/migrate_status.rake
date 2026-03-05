@@ -33,11 +33,11 @@ module Railbow
           # --name-status lines: "A\tfilepath" or "Rnnn\told\tnew"
           cols = line.split("\t")
           status_code = cols[0]
-          if status_code&.start_with?("R")
+          filepath = if status_code&.start_with?("R")
             # Renamed: map the destination (new) filename to the author
-            filepath = cols[2]
+            cols[2]
           else
-            filepath = cols[1]
+            cols[1]
           end
           next unless filepath
           basename = File.basename(filepath)
@@ -46,6 +46,35 @@ module Railbow
         end
       end
       {names: names, emails: emails}
+    end
+
+    # Returns a hash of basename → Date for when each migration file
+    # first appeared on the mainline (merge commit date via --first-parent).
+    def git_migration_landed_dates(migrate_dir)
+      output, _status = Open3.capture2(
+        "git", "log", "--first-parent", "--format=COMMIT:%cI", "--diff-filter=AR", "--name-status", "--", migrate_dir
+      )
+      return {} if output.empty?
+
+      dates = {}
+      current_date = nil
+      output.each_line do |line|
+        line = line.strip
+        if line.start_with?("COMMIT:")
+          current_date = begin
+            Date.parse(line.sub("COMMIT:", ""))
+          rescue Date::Error
+            nil
+          end
+        elsif !line.empty? && current_date
+          cols = line.split("\t")
+          filepath = cols[0]&.start_with?("R") ? cols[2] : cols[1]
+          next unless filepath
+          basename = File.basename(filepath)
+          dates[basename] ||= current_date
+        end
+      end
+      dates
     end
 
     def current_git_email
@@ -230,7 +259,7 @@ module Railbow
           RBW_GIT=author:me RBW_SINCE=3mo rake db:migrate:status
           RBW_DATE=rel rake db:migrate:status
           RBW_DATE=short rake db:migrate:status
-          RBW_DATE=custom(%b\ %d,\ %Y) rake db:migrate:status
+          RBW_DATE='custom(%b %d, %Y)' rake db:migrate:status
           RBW_GIT=diff rake db:migrate:status
           RBW_GIT=diff,base:develop rake db:migrate:status
           RBW_GIT=diff,mask:(WS-[^/]+)/ rake db:migrate:status
@@ -298,27 +327,29 @@ module Railbow
         return
       end
 
-      # Build version → filename lookup (needed for tables or author)
+      # Build version → filename lookup (needed for tables, author, or commit dates)
       version_to_file = {}
-      if tables_enabled || author_enabled || diff_enabled
-        migration_connection_pool.migration_context.migrations.each do |m|
-          version_to_file[m.version.to_s] = m.filename
-        end
+      migration_connection_pool.migration_context.migrations.each do |m|
+        version_to_file[m.version.to_s] = m.filename
       end
 
-      # Load git authors if needed
+      # Load git landed dates (always) and authors (if needed)
       author_names = {}
       author_emails = {}
+      landed_dates = {}
       git_email = nil
       git_name = nil
-      if author_enabled
-        sample_file = version_to_file.values.first
-        if sample_file
-          migrate_dir = File.dirname(sample_file)
+      sample_file = version_to_file.values.first
+      if sample_file
+        migrate_dir = File.dirname(sample_file)
+        landed_dates = git_migration_landed_dates(migrate_dir)
+        if author_enabled
           result = git_migration_authors(migrate_dir)
           author_names = result[:names]
           author_emails = result[:emails]
         end
+      end
+      if author_enabled
         git_email = current_git_email
         git_name = current_git_name if author_mode == "all"
       end
@@ -326,26 +357,39 @@ module Railbow
       # Load diff data if needed
       branch_origins = {}
       uncommitted_files = Set.new
-      if diff_enabled
-        sample_file = version_to_file.values.first
-        if sample_file
-          migrate_dir = File.dirname(sample_file)
-          base_branch = detect_default_branch(base_override)
-          branch_origins = git_branch_migration_origins(migrate_dir, base_branch, branch_mask)
-          uncommitted_files = git_uncommitted_migration_files(migrate_dir)
-          # Assign current branch as origin for uncommitted files
-          current_branch = current_branch_name(branch_mask)
-          uncommitted_files.each { |f| branch_origins[f] ||= current_branch }
-        end
+      if diff_enabled && sample_file
+        base_branch = detect_default_branch(base_override)
+        branch_origins = git_branch_migration_origins(migrate_dir, base_branch, branch_mask)
+        uncommitted_files = git_uncommitted_migration_files(migrate_dir)
+        # Assign current branch as origin for uncommitted files
+        current_branch = current_branch_name(branch_mask)
+        uncommitted_files.each { |f| branch_origins[f] ||= current_branch }
       end
 
       # Build columns
-      needs_name_truncation = tables_enabled || author_mode == "all" || diff_enabled
+      # Latest migration ID date — used to determine "fresh" landed badges
+      latest_version = db_list.last&.dig(1).to_s
+      latest_mig_date = begin
+        Date.new(latest_version[0..3].to_i, latest_version[4..5].to_i, latest_version[6..7].to_i)
+      rescue Date::Error
+        nil
+      end
+
+      has_landed_tags = landed_dates.any? do |basename, cdate|
+        v = basename[0..13]
+        mig_date = begin
+          Date.new(v[0..3].to_i, v[4..5].to_i, v[6..7].to_i)
+        rescue Date::Error
+          nil
+        end
+        mig_date && (cdate - mig_date) > 7
+      end
+      needs_name_truncation = tables_enabled || author_mode == "all" || diff_enabled || has_landed_tags
       name_col_width = needs_name_truncation ? 60 : nil
       table_columns = [
         Railbow::Table::Column.new(label: "Live", max_width: 5),
         Railbow::Table::Column.new(label: "Migration ID"),
-        Railbow::Table::Column.new(label: date_format == "full" ? "Created At" : "Date"),
+        Railbow::Table::Column.new(label: (date_format == "full") ? "Created At" : "Date"),
         Railbow::Table::Column.new(label: "Migration Name",
           max_width: name_col_width,
           truncate: needs_name_truncation)
@@ -366,26 +410,49 @@ module Railbow
         end
         display_name = name.include?("NO FILE") ? formatter.red("NO FILE") : name
 
-        if diff_enabled && !name.include?("NO FILE")
+        if !name.include?("NO FILE")
           filepath = version_to_file[version.to_s]
           basename = filepath ? File.basename(filepath) : nil
 
-          if basename && uncommitted_files.include?(basename)
-            highlight_rows << idx
-            colored_status = "#{colored_status} \e[38;5;220m\u25c6#{Railbow::Formatters::Base::RESET}"
+          # Diff tag (branch origin badge)
+          diff_tag = nil
+          if diff_enabled && basename
+            if uncommitted_files.include?(basename)
+              highlight_rows << idx
+              colored_status = "#{colored_status} \e[38;5;220m\u25c6#{Railbow::Formatters::Base::RESET}"
+            end
+
+            diff_tag = if branch_origins.key?(basename)
+              formatter.diff_tag_branch(branch_origins[basename])
+            end
           end
 
-          diff_tag = if basename && branch_origins.key?(basename)
-            formatter.diff_tag_branch(branch_origins[basename])
+          # Landed badge: show ↪ date when commit date is >7 days after migration ID date
+          landed_tag = nil
+          if basename && landed_dates[basename]
+            v = version.to_s
+            mig_date = begin
+              Date.new(v[0..3].to_i, v[4..5].to_i, v[6..7].to_i)
+            rescue Date::Error
+              nil
+            end
+            if mig_date && (landed_dates[basename] - mig_date) > 7
+              fresh = latest_mig_date && landed_dates[basename] >= latest_mig_date
+              landed_tag = formatter.landed_tag(landed_dates[basename], fresh: fresh)
+            end
           end
 
-          if diff_tag && name_col_width
-            tag_width = formatter.display_width(formatter.strip_ansi(diff_tag))
-            available = name_col_width - tag_width - 2
+          # Append tags to display_name with right-alignment
+          tags = [landed_tag, diff_tag].compact.join(" ")
+          if !tags.empty? && name_col_width
+            tags_width = formatter.display_width(formatter.strip_ansi(tags))
+            available = name_col_width - tags_width - 2
             display_name = formatter.truncate_str(display_name, available)
             name_width = formatter.display_width(formatter.strip_ansi(display_name))
-            padding = name_col_width - name_width - tag_width
-            display_name = "#{display_name}#{" " * [padding, 2].max}#{diff_tag}"
+            padding = name_col_width - name_width - tags_width
+            display_name = "#{display_name}#{" " * [padding, 2].max}#{tags}"
+          elsif !tags.empty?
+            display_name = "#{display_name}  #{tags}"
           end
         end
 

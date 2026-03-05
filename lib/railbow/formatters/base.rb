@@ -48,6 +48,11 @@ module Railbow
 
       def diff_tag_branch(name) = "\e[38;5;39m\u2387 #{name}#{RESET}"
 
+      def landed_tag(date, fresh: false)
+        color = fresh ? "\e[38;5;220m" : DIM
+        "#{color}↪ #{date.strftime("%b %d")}#{RESET}"
+      end
+
       def table_tag(table_name)
         color_code = table_color(table_name)
         "\e[38;5;#{color_code}m● #{table_name}#{RESET}"
