@@ -8,6 +8,8 @@ module Railbow
 
     # Parse compound ENV value: "author:me,diff,base:develop"
     # → { "author" => "me", "diff" => true, "base" => "develop" }
+    # Repeated keys collect into arrays: "hide:date,hide:author"
+    # → { "hide" => ["date", "author"] }
     def parse_compound(value)
       return {} if value.nil? || value.strip.empty?
 
@@ -17,7 +19,14 @@ module Railbow
         next if token.empty?
 
         key, val = token.split(":", 2)
-        result[key.strip] = val ? val.strip : true
+        key = key.strip
+        val = val ? val.strip : true
+
+        result[key] = if result.key?(key)
+          Array(result[key]) << val
+        else
+          val
+        end
       end
       result
     end
@@ -67,8 +76,50 @@ module Railbow
       ENV.fetch("RBW_SORT", "file").strip.downcase
     end
 
+    # --- Compound: RBW_COMPACT ---
+
     def compact
-      ENV.fetch("RBW_COMPACT", nil)
+      parse_compound(ENV["RBW_COMPACT"])
+    end
+
+    def compact_oneline?
+      compact["oneline"] == true
+    end
+
+    def compact_strip_format?
+      compact["strip-format"] == true
+    end
+
+    def compact_dense?
+      compact["dense"] == true
+    end
+
+    def compact_noheader?
+      compact["noheader"] == true
+    end
+
+    def compact_maxw
+      val = compact["maxw"]
+      val.is_a?(String) ? val.to_i : nil
+    end
+
+    def compact_hidden_columns
+      val = compact["hide"]
+      return [] if val.nil?
+      Array(val)
+    end
+
+    def compact_options
+      c = compact
+      maxw_val = c["maxw"]
+      hide_val = c["hide"]
+      {
+        oneline: c["oneline"] == true,
+        dense: c["dense"] == true,
+        noheader: c["noheader"] == true,
+        maxw: maxw_val.is_a?(String) ? maxw_val.to_i : nil,
+        hidden_columns: hide_val.nil? ? [] : Array(hide_val)
+      }
     end
 
     def verb
@@ -121,11 +172,11 @@ module Railbow
     end
 
     def view_tables?
-      !view["tables"].nil?
-    end
-
-    def view_tables_nowrap?
-      view["tables"] == "nowrap" || view["nowrap"] == true
+      val = view["tables"]
+      if val == "nowrap"
+        warn "  Warning: RBW_VIEW=tables:nowrap is deprecated. Use RBW_COMPACT=oneline instead."
+      end
+      !val.nil?
     end
 
     # --- Compound: RBW_CALENDAR ---

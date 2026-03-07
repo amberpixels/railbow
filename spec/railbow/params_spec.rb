@@ -45,6 +45,26 @@ RSpec.describe Railbow::Params do
     it "returns empty hash for blank string" do
       expect(described_class.parse_compound("  ")).to eq({})
     end
+
+    it "collects repeated keys into arrays" do
+      result = described_class.parse_compound("hide:date,hide:author")
+      expect(result).to eq("hide" => ["date", "author"])
+    end
+
+    it "promotes single key to array on second occurrence" do
+      result = described_class.parse_compound("hide:date,diff,hide:author")
+      expect(result).to eq("hide" => ["date", "author"], "diff" => true)
+    end
+
+    it "collects three repeated keys into array" do
+      result = described_class.parse_compound("hide:a,hide:b,hide:c")
+      expect(result).to eq("hide" => ["a", "b", "c"])
+    end
+
+    it "keeps single keys as scalars" do
+      result = described_class.parse_compound("oneline,maxw:80")
+      expect(result).to eq("oneline" => true, "maxw" => "80")
+    end
   end
 
   describe ".truthy?" do
@@ -203,7 +223,6 @@ RSpec.describe Railbow::Params do
     it "defaults all view options to false" do
       expect(described_class.view_calendar?).to be false
       expect(described_class.view_tables?).to be false
-      expect(described_class.view_tables_nowrap?).to be false
     end
 
     it "parses calendar" do
@@ -218,25 +237,18 @@ RSpec.describe Railbow::Params do
       expect(described_class.view_tables?).to be true
     end
 
-    it "parses tables:nowrap" do
-      ENV["RBW_VIEW"] = "tables:nowrap"
-
-      expect(described_class.view_tables?).to be true
-      expect(described_class.view_tables_nowrap?).to be true
-    end
-
-    it "parses tables,nowrap as fallback" do
-      ENV["RBW_VIEW"] = "tables,nowrap"
-
-      expect(described_class.view_tables?).to be true
-      expect(described_class.view_tables_nowrap?).to be true
-    end
-
     it "parses combined view options" do
       ENV["RBW_VIEW"] = "calendar,tables"
 
       expect(described_class.view_calendar?).to be true
       expect(described_class.view_tables?).to be true
+    end
+
+    it "warns about deprecated tables:nowrap" do
+      ENV["RBW_VIEW"] = "tables:nowrap"
+
+      expect { described_class.view_tables? }
+        .to output(/deprecated.*RBW_COMPACT=oneline/).to_stderr
     end
   end
 
@@ -273,14 +285,71 @@ RSpec.describe Railbow::Params do
     end
   end
 
-  describe ".compact" do
-    it "returns nil by default" do
-      expect(described_class.compact).to be_nil
+  describe "compact compound accessors" do
+    it "returns empty hash by default" do
+      expect(described_class.compact).to eq({})
     end
 
-    it "reads RBW_COMPACT" do
-      ENV["RBW_COMPACT"] = "0"
-      expect(described_class.compact).to eq("0")
+    it "parses oneline" do
+      ENV["RBW_COMPACT"] = "oneline"
+      expect(described_class.compact_oneline?).to be true
+    end
+
+    it "parses strip-format" do
+      ENV["RBW_COMPACT"] = "strip-format"
+      expect(described_class.compact_strip_format?).to be true
+    end
+
+    it "parses dense" do
+      ENV["RBW_COMPACT"] = "dense"
+      expect(described_class.compact_dense?).to be true
+    end
+
+    it "parses noheader" do
+      ENV["RBW_COMPACT"] = "noheader"
+      expect(described_class.compact_noheader?).to be true
+    end
+
+    it "parses maxw as integer" do
+      ENV["RBW_COMPACT"] = "maxw:80"
+      expect(described_class.compact_maxw).to eq(80)
+    end
+
+    it "returns nil maxw when unset" do
+      expect(described_class.compact_maxw).to be_nil
+    end
+
+    it "parses single hidden column" do
+      ENV["RBW_COMPACT"] = "hide:date"
+      expect(described_class.compact_hidden_columns).to eq(["date"])
+    end
+
+    it "parses multiple hidden columns via repeated keys" do
+      ENV["RBW_COMPACT"] = "hide:date,hide:author"
+      expect(described_class.compact_hidden_columns).to eq(["date", "author"])
+    end
+
+    it "returns empty array for hidden_columns when unset" do
+      expect(described_class.compact_hidden_columns).to eq([])
+    end
+
+    it "builds compact_options hash" do
+      ENV["RBW_COMPACT"] = "oneline,dense,maxw:60,hide:date"
+      opts = described_class.compact_options
+      expect(opts[:oneline]).to be true
+      expect(opts[:dense]).to be true
+      expect(opts[:maxw]).to eq(60)
+      expect(opts[:hidden_columns]).to eq(["date"])
+      expect(opts[:noheader]).to be false
+    end
+
+    it "defaults all compact options to off" do
+      opts = described_class.compact_options
+      expect(opts[:oneline]).to be false
+      expect(opts[:dense]).to be false
+      expect(opts[:noheader]).to be false
+      expect(opts[:maxw]).to be_nil
+      expect(opts[:hidden_columns]).to eq([])
     end
   end
 end

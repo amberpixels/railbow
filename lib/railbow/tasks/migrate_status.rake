@@ -4,6 +4,7 @@ require "date"
 require "open3"
 require_relative "../formatters/base"
 require_relative "../migration_parser"
+require_relative "../config"
 require_relative "../table"
 require_relative "../logo"
 
@@ -230,7 +231,13 @@ module Railbow
           RBW_VIEW=<options>       Display options (comma-separated):
                                    calendar   — show month/year separator lines + week ticks
                                    tables     — parse migration files, show Tables column
-                                   tables:nowrap — truncate Tables column instead of wrapping
+
+          RBW_COMPACT=<options>    Compact display (comma-separated):
+                                   oneline    — truncate instead of wrapping
+                                   dense      — remove cell padding
+                                   noheader   — hide table header row
+                                   maxw:<n>   — cap column widths at n chars
+                                   hide:<col> — hide a column by name (repeatable)
 
           RBW_CALENDAR=<options>  Calendar sub-options (requires RBW_VIEW=calendar):
                                    wticks     — show week tick marks on date column
@@ -304,7 +311,7 @@ module Railbow
       author_enabled = %w[all me].include?(author_mode)
       diff_enabled = Railbow::Params.git_diff?
       date_format = Railbow::Params.date_format
-      nowrap_enabled = Railbow::Params.view_tables_nowrap?
+      nowrap_enabled = Railbow::Params.compact_oneline?
       base_override = Railbow::Params.git_base
       branch_mask = Railbow::Params.git_mask
 
@@ -387,8 +394,8 @@ module Railbow
       needs_name_truncation = tables_enabled || author_mode == "all" || diff_enabled || has_landed_tags
       name_col_width = needs_name_truncation ? 60 : nil
       table_columns = [
-        Railbow::Table::Column.new(label: "Live", max_width: 5),
-        Railbow::Table::Column.new(label: "Migration ID"),
+        Railbow::Table::Column.new(label: "Status", max_width: 6, sticky: true),
+        Railbow::Table::Column.new(label: "Migration ID", sticky: true),
         Railbow::Table::Column.new(label: (date_format == "full") ? "Created At" : "Date"),
         Railbow::Table::Column.new(label: "Migration Name",
           max_width: name_col_width,
@@ -404,8 +411,8 @@ module Railbow
       highlight_rows = Set.new
       rows = db_list.each_with_index.map do |(status, version, name), idx|
         colored_status = case status
-        when "up" then formatter.green_bold("\u2191\u2191")
-        when "down" then formatter.yellow_bold("\u2193\u2193")
+        when "up" then formatter.green_bold("up")
+        when "down" then formatter.yellow_bold("down")
         else status
         end
         display_name = name.include?("NO FILE") ? formatter.red("NO FILE") : name
@@ -527,7 +534,9 @@ module Railbow
 
       renderer = Railbow::Table::Renderer.new(
         columns: table_columns,
-        theme: Railbow::Table::Themes::WALLS
+        theme: Railbow::Table::Themes::WALLS,
+        compact: Railbow::Params.compact_options,
+        aliases: Railbow::Config.table_aliases
       )
       tick_col = 2 # Date column index
       puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows, tick_rows: tick_rows, tick_col: tick_col)

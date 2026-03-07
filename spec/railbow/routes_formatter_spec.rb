@@ -235,20 +235,20 @@ RSpec.describe Railbow::RoutesFormatter do
   describe "compact mode (format suffix stripping)" do
     before { allow($stdout).to receive(:tty?).and_return(true) }
 
-    it "strips (.:format) from paths by default" do
+    it "keeps (.:format) by default (opt-in strip-format)" do
+      routes = [{name: "users", verb: "GET", path: "/users(.:format)", reqs: "users#index"}]
+      formatter.section(routes)
+      plain = strip_ansi(formatter.result)
+      expect(plain).to include("(.:format)")
+    end
+
+    it "strips (.:format) when RBW_COMPACT=strip-format" do
+      ENV["RBW_COMPACT"] = "strip-format"
       routes = [{name: "users", verb: "GET", path: "/users(.:format)", reqs: "users#index"}]
       formatter.section(routes)
       plain = strip_ansi(formatter.result)
       expect(plain).not_to include("(.:format)")
       expect(plain).to include("/users")
-    end
-
-    it "keeps (.:format) when RBW_COMPACT=0" do
-      ENV["RBW_COMPACT"] = "0"
-      routes = [{name: "users", verb: "GET", path: "/users(.:format)", reqs: "users#index"}]
-      formatter.section(routes)
-      plain = strip_ansi(formatter.result)
-      expect(plain).to include("(.:format)")
     end
   end
 
@@ -380,7 +380,7 @@ RSpec.describe Railbow::RoutesFormatter do
       result = formatter.result
       expect(result).to include("Railbow Routes Options")
       expect(result).to include("RBW_VERB=GET")
-      expect(result).to include("RBW_COMPACT")
+      expect(result).to include("RBW_COMPACT=strip-format")
       expect(result).to include("RBW_PLAIN=1")
     end
   end

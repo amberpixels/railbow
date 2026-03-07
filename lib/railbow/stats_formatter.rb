@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "formatters/base"
+require_relative "config"
 require_relative "table"
 
 module Railbow
@@ -11,7 +12,7 @@ module Railbow
       formatter = Formatters::Base.new
 
       columns = [
-        Table::Column.new(label: "Name"),
+        Table::Column.new(label: "Name", sticky: true),
         Table::Column.new(label: "Lines", align: :right),
         Table::Column.new(label: "LOC", align: :right),
         Table::Column.new(label: "Classes", align: :right),
@@ -34,8 +35,8 @@ module Railbow
         loc = stats.code_lines
         classes = stats.classes
         methods = stats.methods
-        mc = classes > 0 ? (methods.to_f / classes).round(0).to_i : 0
-        locm = methods > 0 ? ((loc.to_f / methods) - 2).round(0).to_i : 0
+        mc = (classes > 0) ? (methods.to_f / classes).round(0).to_i : 0
+        locm = (methods > 0) ? ((loc.to_f / methods) - 2).round(0).to_i : 0
 
         total_lines += lines
         total_loc += loc
@@ -60,8 +61,8 @@ module Railbow
       end
 
       # Total row
-      total_mc = total_classes > 0 ? (total_methods.to_f / total_classes).round(0).to_i : 0
-      total_locm = total_methods > 0 ? ((total_loc.to_f / total_methods) - 2).round(0).to_i : 0
+      total_mc = (total_classes > 0) ? (total_methods.to_f / total_classes).round(0).to_i : 0
+      total_locm = (total_methods > 0) ? ((total_loc.to_f / total_methods) - 2).round(0).to_i : 0
 
       rows << [
         formatter.bold("Total"),
@@ -75,7 +76,9 @@ module Railbow
 
       renderer = Table::Renderer.new(
         columns: columns,
-        theme: Table::Themes::WALLS
+        theme: Table::Themes::WALLS,
+        compact: Railbow::Params.compact_options,
+        aliases: Railbow::Config.table_aliases
       )
 
       output = +"\n"

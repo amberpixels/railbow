@@ -38,6 +38,7 @@ module Railbow
     rake_tasks do
       load "railbow/tasks/migrate_status.rake"
       load "railbow/tasks/stats.rake"
+      load "railbow/tasks/init.rake"
     end
   end
 end

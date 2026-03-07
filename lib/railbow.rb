@@ -2,6 +2,7 @@
 
 require_relative "railbow/version"
 require_relative "railbow/params"
+require_relative "railbow/config"
 
 module Railbow
   class Error < StandardError; end
