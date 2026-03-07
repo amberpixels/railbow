@@ -11,13 +11,22 @@ module Railbow
 
       attr_reader :columns, :theme
 
-      def initialize(columns:, theme:)
-        @columns = columns
+      def initialize(columns:, theme:, compact: {}, aliases: {})
+        @compact = compact
+        @aliases = aliases
+        @reverse_col_aliases = aliases[:columns]&.invert || {}
+        @columns = apply_hidden_columns(columns)
         @theme = theme
       end
 
       def render(rows, separators: {}, highlight_rows: Set.new, tick_rows: Set.new, tick_col: nil)
         return "" if columns.empty?
+
+        # Remap rows if columns were hidden
+        rows = remap_rows(rows) if @hidden_indices&.any?
+
+        # Apply value aliases
+        rows = apply_value_aliases(rows) if @aliases[:values]&.any?
 
         # Pre-truncate non-last columns that have truncate + max_width
         rows = rows.map { |row|
@@ -32,8 +41,22 @@ module Railbow
         }
 
         resolved = resolve_widths(rows)
+
+        # In oneline mode, truncate non-sticky non-last columns at resolved width
+        if @compact[:oneline]
+          rows = rows.map { |row|
+            row.each_with_index.map { |cell, i|
+              col = columns[i]
+              if col && i < columns.size - 1 && !col.sticky && !col.truncate
+                truncate_str(cell.to_s, resolved[i])
+              else
+                cell
+              end
+            }
+          }
+        end
         lines = []
-        lines << render_header(resolved)
+        lines << render_header(resolved) unless @compact[:noheader]
         rows.each_with_index do |row, i|
           tc = (tick_rows.include?(i) && tick_col) ? tick_col : nil
           if separators.key?(i) && theme.format_separator
@@ -53,31 +76,33 @@ module Railbow
       def resolve_widths(rows)
         all_rows = rows
         last = columns.size - 1
+        global_maxw = @compact[:maxw]
 
         columns.each_with_index.map do |col, i|
           if col.fixed?
-            col.width
+            w = col.width
           elsif i == last
             # Last column: don't pad, will be wrapped if it overflows
-            0
+            w = 0
           else
-            header_w = display_width(col.label)
+            header_w = display_width(effective_label(col))
             content_w = all_rows.map { |row| display_width(strip_ansi(row[i].to_s)) }.max || 0
             w = [header_w, content_w].max
             w = [w, col.min_width].max if col.min_width
             w = [w, col.max_width].min if col.max_width
-            w
           end
+          w = [w, global_maxw].min if global_maxw && i != last && w > 0
+          w
         end
       end
 
       def render_header(widths)
         last = columns.size - 1
-        pad = theme.cell_padding
+        pad = effective_padding
 
         columns.each_with_index.map { |col, i|
-          text = col.label
-          padding = (i == last) ? "" : " " * (widths[i] - display_width(text))
+          text = effective_label(col)
+          padding = (i == last) ? "" : " " * [widths[i] - display_width(text), 0].max
           cell = theme.format_header_cell.call("#{text}#{padding}", padding)
           "#{pad}#{cell}#{pad}"
         }.join(theme.header_col_separator)
@@ -85,7 +110,7 @@ module Railbow
 
       def render_row(row, widths, tick_col: nil, tick_cross: false, highlight: false)
         last = columns.size - 1
-        pad = theme.cell_padding
+        pad = effective_padding
         default_sep = theme.col_separator
         tick_sep = tick_cross ? theme.tick_cross_separator : theme.tick_separator
 
@@ -117,7 +142,7 @@ module Railbow
       end
 
       def render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: nil, highlight: false)
-        pad = theme.cell_padding
+        pad = effective_padding
         sep = col_sep || theme.col_separator
 
         # Truncate if configured via column settings
@@ -146,6 +171,13 @@ module Railbow
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
+        # In oneline mode, truncate instead of wrapping
+        if @compact[:oneline] && last_col_max && display_width(last_cell_plain) > last_col_max
+          last_cell_raw = truncate_by_words(last_cell_raw, last_col_max)
+          last_cell_raw = "#{WHITE}#{last_cell_raw}#{RESET}" if highlight
+          return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
+        end
+
         last_cell_raw = "#{WHITE}#{last_cell_raw}#{RESET}" if highlight
 
         if last_col_max && display_width(strip_ansi(last_cell_raw)) > last_col_max
@@ -162,7 +194,7 @@ module Railbow
       end
 
       def compute_prefix_width(widths, last)
-        pad_w = display_width(theme.cell_padding)
+        pad_w = display_width(effective_padding)
         sep_w = display_width(theme.col_separator)
         # Each non-last column: pad + content + pad, joined by separator
         total = 0
@@ -329,6 +361,79 @@ module Railbow
 
         lines << current unless current.empty?
         lines.empty? ? [token] : lines
+      end
+
+      # --- Compact support ---
+
+      def effective_padding
+        @compact[:dense] ? "" : theme.cell_padding
+      end
+
+      def effective_label(col)
+        col_aliases = @aliases[:columns]
+        return col.label unless col_aliases
+
+        col_aliases[col.label] || col.label
+      end
+
+      def apply_hidden_columns(columns)
+        hidden = @compact[:hidden_columns]
+        return columns unless hidden&.any?
+
+        @hidden_indices = []
+        filtered = []
+        columns.each_with_index do |col, i|
+          if hidden.any? { |h| h.downcase == col.label.downcase }
+            @hidden_indices << i
+          else
+            filtered << col
+          end
+        end
+        filtered
+      end
+
+      def remap_rows(rows)
+        rows.map do |row|
+          row.each_with_index.reject { |_, i| @hidden_indices.include?(i) }.map(&:first)
+        end
+      end
+
+      def apply_value_aliases(rows)
+        value_aliases = @aliases[:values]
+        return rows unless value_aliases&.any?
+
+        # Build column index → value alias map
+        col_map = {}
+        columns.each_with_index do |col, i|
+          label = col.label
+          col_map[i] = value_aliases[label] if value_aliases[label]
+          # Also look up by original name if column was renamed by alias
+          original = @reverse_col_aliases[label]
+          col_map[i] = value_aliases[original] if original && value_aliases[original]
+        end
+
+        return rows if col_map.empty?
+
+        rows.map do |row|
+          row.each_with_index.map do |cell, i|
+            aliases_for_col = col_map[i]
+            if aliases_for_col
+              apply_cell_alias(cell.to_s, aliases_for_col)
+            else
+              cell
+            end
+          end
+        end
+      end
+
+      def apply_cell_alias(cell, aliases_for_col)
+        plain = strip_ansi(cell)
+        replacement = aliases_for_col[plain]
+        if replacement
+          cell.sub(plain) { replacement }
+        else
+          cell
+        end
       end
     end
   end

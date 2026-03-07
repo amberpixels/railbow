@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "formatters/base"
+require_relative "config"
 require_relative "table"
 
 module Railbow
@@ -24,10 +25,16 @@ module Railbow
 
         #{CYAN}RBW_VERB=GET#{RESET}          Show only GET routes
         #{CYAN}RBW_VERB=POST,PUT#{RESET}     Show only POST and PUT routes
-        #{CYAN}RBW_COMPACT=0#{RESET}         Keep (.:format) suffixes
+        #{CYAN}RBW_COMPACT=strip-format#{RESET}  Strip (.:format) suffixes
+        #{CYAN}RBW_COMPACT=oneline#{RESET}   Truncate instead of wrapping
+        #{CYAN}RBW_COMPACT=dense#{RESET}     Remove cell padding
+        #{CYAN}RBW_COMPACT=noheader#{RESET}  Hide table header row
+        #{CYAN}RBW_COMPACT=maxw:40#{RESET}   Cap column widths
+        #{CYAN}RBW_COMPACT=hide:prefix#{RESET}  Hide a column by name
         #{CYAN}RBW_PLAIN=1#{RESET}           Disable Railbow formatting (plain Rails output)
         #{CYAN}RBW_HELP=1#{RESET}            Show this help message
 
+      #{DIM}Combine: RBW_COMPACT=strip-format,dense,noheader#{RESET}
       #{DIM}Auto-disabled when piped, in CI, or when called by an LLM agent.#{RESET}
       #{DIM}Example: RBW_VERB=GET rails routes#{RESET}
 
@@ -55,8 +62,8 @@ module Railbow
         return
       end
 
-      compact = compact_mode?
-      prepared = routes.map { |r| prepare_route(r, compact) }
+      strip_format = Railbow::Params.compact_strip_format?
+      prepared = routes.map { |r| prepare_route(r, strip_format) }
       prepared = filter_by_verb(prepared)
 
       groups = group_routes(prepared)
@@ -87,8 +94,8 @@ module Railbow
       end
 
       columns = [
-        Table::Column.new(label: "Verb"),
-        Table::Column.new(label: "URI Pattern"),
+        Table::Column.new(label: "Verb", sticky: true),
+        Table::Column.new(label: "URI Pattern", sticky: true),
         Table::Column.new(label: "Controller#Action"),
         Table::Column.new(label: "Prefix")
       ]
@@ -102,7 +109,12 @@ module Railbow
         ]
       }
 
-      renderer = Table::Renderer.new(columns: columns, theme: Table::Themes::PLAIN)
+      renderer = Table::Renderer.new(
+        columns: columns,
+        theme: Table::Themes::PLAIN,
+        compact: Railbow::Params.compact_options,
+        aliases: Railbow::Config.table_aliases
+      )
       @buffer << renderer.render(rows)
     end
 
@@ -110,10 +122,6 @@ module Railbow
       r = route.dup
       r[:path] = r[:path].sub("(.:format)", "") if compact
       r
-    end
-
-    def compact_mode?
-      Railbow::Params.compact != "0"
     end
 
     def colorize_verb(verb)

@@ -317,6 +317,167 @@ RSpec.describe Railbow::Table::Renderer do
     end
   end
 
+  describe "compact options" do
+    describe "hidden_columns" do
+      it "hides columns by label" do
+        columns = [
+          Railbow::Table::Column.new(label: "Status"),
+          Railbow::Table::Column.new(label: "ID"),
+          Railbow::Table::Column.new(label: "Name")
+        ]
+        renderer = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::WALLS,
+          compact: {hidden_columns: ["id"]}
+        )
+        rows = [["up", "001", "CreateUsers"]]
+        result = strip_ansi(renderer.render(rows))
+        expect(result).to include("Status")
+        expect(result).not_to include("ID")
+        expect(result).to include("CreateUsers")
+        expect(result).not_to include("001")
+      end
+    end
+
+    describe "noheader" do
+      it "skips the header row" do
+        columns = [
+          Railbow::Table::Column.new(label: "Name"),
+          Railbow::Table::Column.new(label: "Val")
+        ]
+        renderer = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::WALLS,
+          compact: {noheader: true}
+        )
+        rows = [["a", "1"]]
+        result = strip_ansi(renderer.render(rows))
+        lines = result.split("\n")
+        expect(lines.size).to eq(1)
+        expect(result).not_to include("Name")
+        expect(result).to include("a")
+      end
+    end
+
+    describe "dense" do
+      it "removes cell padding" do
+        columns = [
+          Railbow::Table::Column.new(label: "Name"),
+          Railbow::Table::Column.new(label: "Val")
+        ]
+        normal = described_class.new(columns: columns, theme: Railbow::Table::Themes::WALLS)
+        dense = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::WALLS,
+          compact: {dense: true}
+        )
+        rows = [["a", "1"]]
+        normal_width = strip_ansi(normal.render(rows)).split("\n")[1].length
+        dense_width = strip_ansi(dense.render(rows)).split("\n")[0].length
+        expect(dense_width).to be < normal_width
+      end
+    end
+
+    describe "maxw" do
+      it "caps column widths at maxw" do
+        columns = [
+          Railbow::Table::Column.new(label: "LongHeader"),
+          Railbow::Table::Column.new(label: "Val")
+        ]
+        # Without maxw, header "LongHeader" (10 chars) sets the width
+        normal = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::PLAIN
+        )
+        capped = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::PLAIN,
+          compact: {maxw: 5}
+        )
+        rows = [["ab", "value"]]
+        normal_result = strip_ansi(normal.render(rows))
+        capped_result = strip_ansi(capped.render(rows))
+        normal_pos = normal_result.split("\n")[1].index("value")
+        capped_pos = capped_result.split("\n")[1].index("value")
+        expect(capped_pos).to be < normal_pos
+      end
+    end
+
+    describe "oneline" do
+      it "truncates last column instead of wrapping" do
+        columns = [
+          Railbow::Table::Column.new(label: "A"),
+          Railbow::Table::Column.new(label: "B")
+        ]
+        renderer = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::PLAIN,
+          compact: {oneline: true}
+        )
+        allow(renderer).to receive(:terminal_width).and_return(30)
+        rows = [["short", "this is a very long value that should be truncated"]]
+        result = renderer.render(rows)
+        data_lines = result.split("\n")[1..]
+        expect(data_lines.size).to eq(1)
+      end
+    end
+  end
+
+  describe "aliases" do
+    describe "column aliases" do
+      it "renames column headers" do
+        columns = [
+          Railbow::Table::Column.new(label: "Status"),
+          Railbow::Table::Column.new(label: "Name")
+        ]
+        renderer = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::WALLS,
+          aliases: {columns: {"Status" => "Live"}, values: {}}
+        )
+        rows = [["up", "test"]]
+        result = strip_ansi(renderer.render(rows))
+        expect(result).to include("Live")
+        expect(result).not_to include("Status")
+      end
+    end
+
+    describe "value aliases" do
+      it "replaces cell values via alias map" do
+        columns = [
+          Railbow::Table::Column.new(label: "Status"),
+          Railbow::Table::Column.new(label: "Name")
+        ]
+        renderer = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::WALLS,
+          aliases: {columns: {}, values: {"Status" => {"up" => "↑↑", "down" => "↓↓"}}}
+        )
+        rows = [["up", "test"], ["down", "other"]]
+        result = strip_ansi(renderer.render(rows))
+        expect(result).to include("↑↑")
+        expect(result).to include("↓↓")
+        expect(result).not_to include(" up ")
+        expect(result).not_to include(" down ")
+      end
+
+      it "preserves ANSI wrapping when replacing values" do
+        columns = [
+          Railbow::Table::Column.new(label: "Status"),
+          Railbow::Table::Column.new(label: "Name")
+        ]
+        renderer = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::WALLS,
+          aliases: {columns: {}, values: {"Status" => {"up" => "↑↑"}}}
+        )
+        rows = [["\e[32mup\e[0m", "test"]]
+        result = renderer.render(rows)
+        expect(result).to include("\e[32m↑↑\e[0m")
+      end
+    end
+  end
+
   describe "min_width and max_width" do
     it "respects min_width even when content is shorter" do
       columns = [
