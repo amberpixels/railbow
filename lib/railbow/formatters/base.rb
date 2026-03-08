@@ -122,10 +122,14 @@ module Railbow
         ts = timestamp.to_s
         return ts if ts.length != 14
 
-        time = Time.new(
-          ts[0..3].to_i, ts[4..5].to_i, ts[6..7].to_i,
-          ts[8..9].to_i, ts[10..11].to_i, ts[12..13].to_i
-        )
+        time = begin
+          Time.new(
+            ts[0..3].to_i, ts[4..5].to_i, ts[6..7].to_i,
+            ts[8..9].to_i, ts[10..11].to_i, ts[12..13].to_i
+          )
+        rescue ArgumentError
+          return ts
+        end
 
         case mode
         when "full"
