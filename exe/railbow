@@ -1,0 +1,90 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../lib/railbow/version"
+
+module Railbow
+  module CLI
+    module_function
+
+    def run(args)
+      case args.first
+      when "--help", "-h", nil
+        print_usage
+        exit 0
+      when "--version", "-v"
+        puts "railbow #{Railbow::VERSION}"
+        exit 0
+      end
+
+      project_gemfile = find_gemfile
+      unless project_gemfile
+        $stderr.puts "Error: Could not find a Gemfile in the current directory or any parent directory."
+        exit 1
+      end
+
+      wrapper_path = create_wrapper_gemfile(project_gemfile)
+      symlink_lockfile(project_gemfile, wrapper_path)
+
+      env = { "BUNDLE_GEMFILE" => wrapper_path }
+      Kernel.exec(env, "bundle", "exec", *args)
+    end
+
+    def find_gemfile
+      dir = Dir.pwd
+      loop do
+        gemfile = File.join(dir, "Gemfile")
+        return gemfile if File.exist?(gemfile)
+
+        parent = File.dirname(dir)
+        return nil if parent == dir
+
+        dir = parent
+      end
+    end
+
+    def create_wrapper_gemfile(project_gemfile)
+      require "tempfile"
+
+      wrapper = Tempfile.new(["railbow-wrapper-", ".gemfile"], "/tmp")
+      wrapper.write(<<~RUBY)
+        eval_gemfile #{project_gemfile.inspect}
+        gem "railbow", "= #{Railbow::VERSION}"
+      RUBY
+      wrapper.close
+
+      wrapper.path
+    end
+
+    def symlink_lockfile(project_gemfile, wrapper_path)
+      lockfile = "#{project_gemfile}.lock"
+      return unless File.exist?(lockfile)
+
+      wrapper_lock = "#{wrapper_path}.lock"
+      File.symlink(lockfile, wrapper_lock)
+    end
+
+    def print_usage
+      puts <<~HELP
+        Usage: railbow <command> [args...]
+
+        Wraps any bundled Rails command so railbow is loaded automatically,
+        without modifying the project's Gemfile.
+
+        Examples:
+          railbow rake db:migrate:status
+          railbow rails db:migrate:status
+          railbow rake db:migrate
+
+        Options:
+          --help, -h       Show this help message
+          --version, -v    Show version
+
+        For daily use, add railbow to your Gemfile instead:
+          gem "railbow", group: :development
+      HELP
+    end
+  end
+end
+
+Railbow::CLI.run(ARGV)
