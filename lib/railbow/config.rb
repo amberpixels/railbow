@@ -12,7 +12,11 @@ module Railbow
         "values" => {
           "Status" => {"up" => "↑↑", "down" => "↓↓"}
         }
-      }
+      },
+      "since" => "70d",
+      "git" => "author:me,diff,mask:auto",
+      "view" => "calendar,tables",
+      "calendar" => "wticks"
     }.freeze
 
     @root = nil
