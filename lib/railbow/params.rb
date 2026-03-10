@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "date"
+require_relative "config"
 
 module Railbow
   module Params
@@ -69,17 +70,17 @@ module Railbow
     end
 
     def since
-      ENV.fetch("RBW_SINCE", "all").strip.downcase
+      (ENV["RBW_SINCE"] || Config.load["since"] || "all").strip.downcase
     end
 
     def sort
-      ENV.fetch("RBW_SORT", "file").strip.downcase
+      (ENV["RBW_SORT"] || Config.load["sort"] || "file").strip.downcase
     end
 
     # --- Compound: RBW_COMPACT ---
 
     def compact
-      parse_compound(ENV["RBW_COMPACT"])
+      parse_compound(ENV["RBW_COMPACT"] || Config.load["compact"])
     end
 
     def compact_oneline?
@@ -123,13 +124,13 @@ module Railbow
     end
 
     def verb
-      ENV.fetch("RBW_VERB", nil)
+      ENV["RBW_VERB"] || Config.load["verb"]
     end
 
     # --- Compound: RBW_GIT ---
 
     def git
-      parse_compound(ENV["RBW_GIT"])
+      parse_compound(ENV["RBW_GIT"] || Config.load["git"])
     end
 
     def git_author
@@ -152,19 +153,30 @@ module Railbow
       val.is_a?(String) ? val : ""
     end
 
+    # Built-in regex for extracting ticket/task identifiers from branch names.
+    # Matches patterns like: ws-123, 123, abc123, ab-123-456, feat/ws-1234, feat/123-some-feature
+    TICKET_RE = /(?:^|\/)([a-z]{1,5}-?\d+(?:-\d+)*|\d+(?:-\d+)*)/i
+
+    # Extract a ticket identifier from a branch name.
+    # Returns the matched identifier or the original branch name if no match.
+    def extract_branch_ticket(branch)
+      m = branch.match(TICKET_RE)
+      m ? m[1] : branch
+    end
+
     # --- RBW_DATE ---
 
     def date_format
-      val = ENV["RBW_DATE"]
-      return "full" if val.nil? || val.strip.empty?
+      val = ENV["RBW_DATE"] || Config.load["date"]
+      return "full" if val.nil? || val.to_s.strip.empty?
 
-      val.strip
+      val.to_s.strip
     end
 
     # --- Compound: RBW_VIEW ---
 
     def view
-      parse_compound(ENV["RBW_VIEW"])
+      parse_compound(ENV["RBW_VIEW"] || Config.load["view"])
     end
 
     def view_calendar?
@@ -182,7 +194,7 @@ module Railbow
     # --- Compound: RBW_CALENDAR ---
 
     def calendar
-      parse_compound(ENV["RBW_CALENDAR"])
+      parse_compound(ENV["RBW_CALENDAR"] || Config.load["calendar"])
     end
 
     def calendar_wticks?

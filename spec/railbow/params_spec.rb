@@ -128,7 +128,12 @@ RSpec.describe Railbow::Params do
   end
 
   describe ".since" do
-    it "defaults to 'all'" do
+    it "defaults to '70d' from config" do
+      expect(described_class.since).to eq("70d")
+    end
+
+    it "can be set to 'all' via ENV override" do
+      ENV["RBW_SINCE"] = "all"
       expect(described_class.since).to eq("all")
     end
 
@@ -150,8 +155,8 @@ RSpec.describe Railbow::Params do
   end
 
   describe "git compound accessors" do
-    it "defaults git_author to 'off'" do
-      expect(described_class.git_author).to eq("off")
+    it "defaults git_author to 'me'" do
+      expect(described_class.git_author).to eq("me")
     end
 
     it "bare 'author' defaults to 'all'" do
@@ -193,6 +198,29 @@ RSpec.describe Railbow::Params do
     end
   end
 
+  describe ".extract_branch_ticket" do
+    {
+      "ws-123" => "ws-123",
+      "123" => "123",
+      "123-some-feature" => "123",
+      "abc123" => "abc123",
+      "123/some-feature" => "123",
+      "feat/123-some-feature" => "123",
+      "ab-123-456/some-feature" => "ab-123-456",
+      "feat/ws-1234" => "ws-1234",
+      "fix/ABC-42-login-bug" => "ABC-42",
+      "hotfix/99-urgent" => "99"
+    }.each do |branch, expected|
+      it "extracts #{expected.inspect} from #{branch.inspect}" do
+        expect(described_class.extract_branch_ticket(branch)).to eq(expected)
+      end
+    end
+
+    it "returns the original branch name when no ticket pattern matches" do
+      expect(described_class.extract_branch_ticket("main")).to eq("main")
+    end
+  end
+
   describe ".date_format" do
     it "defaults to 'full'" do
       expect(described_class.date_format).to eq("full")
@@ -220,9 +248,9 @@ RSpec.describe Railbow::Params do
   end
 
   describe "view compound accessors" do
-    it "defaults all view options to false" do
-      expect(described_class.view_calendar?).to be false
-      expect(described_class.view_tables?).to be false
+    it "defaults all view options to true" do
+      expect(described_class.view_calendar?).to be true
+      expect(described_class.view_tables?).to be true
     end
 
     it "parses calendar" do
@@ -253,13 +281,8 @@ RSpec.describe Railbow::Params do
   end
 
   describe "calendar compound accessors" do
-    it "defaults calendar_wticks? to false" do
-      expect(described_class.calendar_wticks?).to be false
-    end
-
-    it "remains false with calendar but no wticks" do
-      ENV["RBW_VIEW"] = "calendar"
-      expect(described_class.calendar_wticks?).to be false
+    it "defaults calendar_wticks? to true" do
+      expect(described_class.calendar_wticks?).to be true
     end
 
     it "enables wticks with RBW_CALENDAR=wticks" do
@@ -269,6 +292,7 @@ RSpec.describe Railbow::Params do
     end
 
     it "requires calendar mode for wticks" do
+      ENV["RBW_VIEW"] = "tables"
       ENV["RBW_CALENDAR"] = "wticks"
       expect(described_class.calendar_wticks?).to be false
     end

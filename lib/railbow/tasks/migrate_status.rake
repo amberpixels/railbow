@@ -88,16 +88,20 @@ module Railbow
       output.strip
     end
 
+    def apply_branch_mask(branch, branch_mask)
+      return branch if branch_mask.empty?
+
+      return Railbow::Params.extract_branch_ticket(branch) if branch_mask == "auto"
+
+      m = branch.match(Regexp.new(branch_mask, Regexp::IGNORECASE))
+      (m && m[1]) ? m[1] : branch
+    end
+
     def current_branch_name(branch_mask)
       output, status = Open3.capture2("git", "rev-parse", "--abbrev-ref", "HEAD")
       return "HEAD" unless status.success?
 
-      branch = output.strip
-      if !branch_mask.empty?
-        m = branch.match(Regexp.new(branch_mask, Regexp::IGNORECASE))
-        branch = m[1] if m && m[1]
-      end
-      branch
+      apply_branch_mask(output.strip, branch_mask)
     end
 
     def detect_default_branch(override)
@@ -181,11 +185,7 @@ module Railbow
         end
 
         # Apply mask
-        label = best
-        if !branch_mask.empty? && best
-          m = best.match(Regexp.new(branch_mask, Regexp::IGNORECASE))
-          label = m[1] if m && m[1]
-        end
+        label = best ? apply_branch_mask(best, branch_mask) : best
 
         origins[basename] = label
       end
@@ -252,6 +252,7 @@ module Railbow
                                    base:<branch> — base branch for diff (default: auto-detected)
                                    mask:<re>  — regex to extract branch label
                                                 e.g. mask:(WS-[^/]+)/
+                                   mask:auto  — auto-extract ticket id from branch name
 
           RBW_PLAIN=1              Disable Railbow formatting (plain Rails output)
 

@@ -428,11 +428,17 @@ module Railbow
 
       def apply_cell_alias(cell, aliases_for_col)
         plain = strip_ansi(cell)
+        # Try exact match first, then prefix match for cells with appended indicators
         replacement = aliases_for_col[plain]
         if replacement
           cell.sub(plain) { replacement }
         else
-          cell
+          key = aliases_for_col.keys.find { |k| plain.start_with?(k) && plain[k.length..] =~ /\A\s/ }
+          if key
+            cell.sub(key) { aliases_for_col[key] }
+          else
+            cell
+          end
         end
       end
     end

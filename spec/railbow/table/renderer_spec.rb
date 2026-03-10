@@ -461,6 +461,23 @@ RSpec.describe Railbow::Table::Renderer do
         expect(result).not_to include(" down ")
       end
 
+      it "replaces values with appended indicators (e.g. down ◆)" do
+        columns = [
+          Railbow::Table::Column.new(label: "Status"),
+          Railbow::Table::Column.new(label: "Name")
+        ]
+        renderer = described_class.new(
+          columns: columns,
+          theme: Railbow::Table::Themes::WALLS,
+          aliases: {columns: {}, values: {"Status" => {"up" => "↑↑", "down" => "↓↓"}}}
+        )
+        rows = [["up", "test"], ["down \e[38;5;220m\u25c6\e[0m", "other"]]
+        result = strip_ansi(renderer.render(rows))
+        expect(result).to include("↓↓")
+        expect(result).to include("◆")
+        expect(result).not_to match(/\bdown\b/)
+      end
+
       it "preserves ANSI wrapping when replacing values" do
         columns = [
           Railbow::Table::Column.new(label: "Status"),

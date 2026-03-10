@@ -15,6 +15,10 @@ module Railbow
       when "--version", "-v"
         puts "railbow #{Railbow::VERSION}"
         exit 0
+      when "init"
+        require "railbow/init"
+        Railbow::Init.run
+        exit 0
       end
 
       project_gemfile = find_gemfile
@@ -71,7 +75,11 @@ module Railbow
         Wraps any bundled Rails command so railbow is loaded automatically,
         without modifying the project's Gemfile.
 
+        Commands:
+          init             Generate a config file (interactive)
+
         Examples:
+          railbow init
           railbow rake db:migrate:status
           railbow rails db:migrate:status
           railbow rake db:migrate
