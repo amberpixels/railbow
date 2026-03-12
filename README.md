@@ -6,35 +6,45 @@
  ░█─░█ ░█─░█ ▄█▄ ░█▄▄█ ░█▄▄█ ░█▄▄▄█ ─░█░█─
 ```
 
-Make your Rails database migrations beautiful! Railbow enhances Rails migration command output with modern, colorful, emoji-enhanced formatting.
+**Make your Rails CLI output beautiful.** Railbow enhances migrations, routes, stats, notes, and more with colorful, emoji-rich, information-dense formatting.
 
 ## Features
 
-- 🎨 **Colorful Output**: Color-coded migration status and timing information
-- ⚡ **Readable Timing**: Millisecond-precision timing display
-- 🎯 **Enhanced Status Display**: Beautiful table format for `db:migrate:status`
-- 🚀 **Zero Configuration**: Works immediately after installation
-- ✅ **Rails 7.2+ Compatible**: Supports Rails 7.2+ and 8.x
+- **Migrations** - colorful `db:migrate` output with readable millisecond timing
+- **Migration Status** - rich `db:migrate:status` with git authors, calendar view, table detection, landing dates, and time filtering
+- **Routes** - color-coded HTTP verbs and highlighted parameters in `rails routes`
+- **Stats** - beautiful `rails stats` tables
+- **Notes** - `rails notes` with git blame, author colors, date filtering, and sorting
+- **About** - polished `rails about` output
+- **Git Integration** - authors, diffs, branch origin, landing dates, uncommitted file indicators
+- **Calendar View** - month separators and week tick markers for migration timelines
+- **Smart Defaults** - auto-disables in CI, piped output, `NO_COLOR`, and LLM agents
 
 ## Installation
 
-Add this line to your application's Gemfile:
+### Option A: Add to your Gemfile (recommended)
 
 ```ruby
-gem 'railbow'
+gem "railbow", group: :development
 ```
-
-Then execute:
 
 ```bash
 bundle install
 ```
 
-That's it! No configuration needed. Your migrations will now look beautiful.
+### Option B: Use the CLI wrapper (no Gemfile changes)
+
+```bash
+gem install railbow
+railbow rake db:migrate:status
+railbow rails routes
+```
+
+The CLI creates a temporary wrapper so Railbow loads automatically without modifying your project's Gemfile.
 
 ## Usage
 
-Railbow automatically enhances these Rails commands:
+Railbow works automatically once installed. Every example below works with both `rails` and `rake` commands.
 
 ### `rails db:migrate`
 
@@ -74,54 +84,138 @@ down     20160213170731  Create owners
  down   │ 20160213170731 │ 2016-02-13 17:07:31 │ Create owners
 ```
 
-### `rails db:migrate:down VERSION=xxx`
+With git integration enabled (default), you also get author names, landing dates, branch origin badges, affected table names, and calendar month separators.
 
-**Before:**
-```
-==  CreateProducts: reverting ================================================
--- drop_table(:products)
-   -> 0.0012s
-==  CreateProducts: reverted (0.0012s) =======================================
-```
+### `rails db:migrate:down`
 
-**After:**
 ```
 ⏪ CreateProducts: reverting...
   ✓ drop_table(:products) → 1.2ms
 ✅ CreateProducts: reverted (1.2ms total)
 ```
 
+### `rails routes`
+
+HTTP verbs are color-coded (GET=green, POST=yellow, PATCH/PUT=cyan, DELETE=red), route parameters (`:id`, `*splat`) are highlighted, and controller#action pairs stand out.
+
+### `rails stats`
+
+Code statistics rendered as a colorful table with highlighted totals and code-to-test ratio.
+
+### `rails notes`
+
+Annotations enriched with git blame data — author names, commit dates, and color-coded tags (TODO=yellow, FIXME=red, OPTIMIZE=cyan, HACK=red, NOTE=green).
+
+## Configuration
+
+Railbow works with zero configuration, but everything is customizable.
+
+### Config files
+
+Config is loaded in layers (each overrides the previous):
+
+1. **Built-in defaults**
+2. **Global:** `~/.config/railbow/config.yml`
+3. **Project:** `.railbow.yml` (commit to git)
+4. **Local:** `.railbow.local.yml` (gitignored, personal overrides)
+
+Generate a config interactively:
+
+```bash
+railbow init
+# or, within a Rails project:
+rake railbow:init
+```
+
+### Example `.railbow.yml`
+
+```yaml
+since: 70d
+date: rel
+git: "author:me,diff,mask:auto"
+view: "calendar,tables"
+calendar: wticks
+
+compact: "maxw:120"
+
+aliases:
+  columns:
+    Status: Live
+  values:
+    Status:
+      up: "↑↑"
+      down: "↓↓"
+```
+
+### Environment variables
+
+Every option can also be set via `RBW_*` environment variables, which override config files:
+
+| Variable | Example | Description |
+|---|---|---|
+| `RBW_PLAIN` | `1` | Disable all formatting |
+| `RBW_SINCE` | `2mo`, `70d`, `1y`, `all` | Filter migrations by time period |
+| `RBW_DATE` | `full`, `rel`, `short`, `custom(%b %d)` | Date display format |
+| `RBW_GIT` | `author:me,diff,mask:auto` | Git integration options |
+| `RBW_VIEW` | `calendar,tables` | Enable calendar view and table detection |
+| `RBW_CALENDAR` | `wticks` | Show week tick markers |
+| `RBW_COMPACT` | `oneline,dense,noheader,maxw:80` | Compact display options |
+| `RBW_VERB` | `GET,POST` | Filter routes by HTTP method |
+| `RBW_SORT` | `file`, `date` | Sort order for notes |
+| `RBW_HELP` | `1` | Show help messages |
+
+### Quick examples
+
+```bash
+# Last 2 months, calendar view
+RBW_SINCE=2mo rake db:migrate:status
+
+# Relative dates, highlight your migrations
+RBW_DATE=rel RBW_GIT=author:me rake db:migrate:status
+
+# Full git context with table detection
+RBW_GIT=author:all,diff RBW_VIEW=tables rake db:migrate:status
+
+# Only GET routes
+RBW_VERB=GET rails routes
+
+# Notes sorted by commit date
+RBW_SORT=date rails notes
+```
+
 ## How It Works
 
-Railbow integrates seamlessly with Rails through a Railtie. It:
+Railbow integrates through a Rails Railtie — it prepends formatter modules onto existing Rails classes without modifying your code:
 
-1. Prepends formatting methods to `ActiveRecord::Migration`
-2. Overrides the `db:migrate:status` Rake task
-3. Adds colorization, emojis, and timing enhancements
-4. Maintains full compatibility with standard Rails behavior
+- `ActiveRecord::Migration` - migration output
+- `ActiveRecord::Tasks::DatabaseTasks` - migration status
+- `ActionDispatch::Routing::ConsoleFormatter::Sheet` - routes
+- `Rails::Info` - about
+- `Rails::SourceAnnotationExtractor` - notes
 
-No changes to your migrations or existing code are required.
+Formatting auto-disables when:
+- `RBW_PLAIN=1` or `NO_COLOR` is set
+- Running in CI (`CI` env var)
+- Output is piped or redirected (non-TTY)
+- Running inside an LLM agent (`CLAUDECODE` env var)
 
 ## Requirements
 
 - Ruby >= 3.1.0
-- Rails >= 7.2
-- ActiveRecord >= 7.2
+- Rails >= 7.2 (including 8.x)
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`.
+```bash
+bin/setup          # Install dependencies
+bundle exec rake   # Run tests + linting (RSpec + Standard)
+bin/console        # Interactive prompt
+```
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/amberpixels/railbow. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/amberpixels/railbow/blob/main/CODE_OF_CONDUCT.md).
+Bug reports and pull requests are welcome at [github.com/amberpixels/railbow](https://github.com/amberpixels/railbow).
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
-
-## Code of Conduct
-
-Everyone interacting in the Railbow project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/amberpixels/railbow/blob/main/CODE_OF_CONDUCT.md).
+MIT License. See [LICENSE.txt](https://github.com/amberpixels/railbow/blob/main/LICENSE.txt).
