@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require_relative "../lib/railbow/version"
+require_relative "../lib/railbow/logo"
 
 module Railbow
   module CLI
@@ -10,10 +11,13 @@ module Railbow
     def run(args)
       case args.first
       when "--help", "-h", nil
+        Railbow.print_logo
+        puts
         print_usage
         exit 0
       when "--version", "-v"
-        puts "railbow #{Railbow::VERSION}"
+        Railbow.print_logo
+        puts " v#{Railbow::VERSION}"
         exit 0
       when "init"
         require "railbow/init"

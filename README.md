@@ -1,10 +1,4 @@
-# Railbow
-
-```
- ░█▀▀█ ░█▀▀█ ▀█▀ ░█─── ░█▀▀█ ░█▀▀▀█ ░█───░█
- ░█▄▄▀ ░█▄▄█ ░█─ ░█─── ░█▀▀▄ ░█──░█ ░█─█─░█
- ░█─░█ ░█─░█ ▄█▄ ░█▄▄█ ░█▄▄█ ░█▄▄▄█ ─░█░█─
-```
+# $\textcolor{red}{R}\textcolor{orange}{A}\textcolor{gold}{I}\textcolor{green}{L}\textcolor{dodgerblue}{B}\textcolor{blueviolet}{O}\textcolor{mediumvioletred}{W}$
 
 **Make your Rails CLI output beautiful.** Railbow enhances migrations, routes, stats, notes, and more with colorful, emoji-rich, information-dense formatting.
 
@@ -65,26 +59,41 @@ Railbow works automatically once installed. Every example below works with both 
 
 ### `rails db:migrate:status`
 
-**Before:**
-```
-database: db/development.sqlite3
+This is Railbow's flagship feature. The plain Rails output:
 
+```
 Status   Migration ID    Migration Name
 --------------------------------------------------
-up       20140711185212  Create documentation pages
-down     20160213170731  Create owners
+up       20260202145343  Add weight field to animals
+up       20260203134528  Create vaccination records
+up       20260210183902  Create pet tags
+up       20260303120000  Add breed restrictions to adoption policies
+up       20260313132325  Create veterinary appointments
 ```
 
-**After:**
-```
-📊 Database: db/development.sqlite3
+becomes a rich, information-dense dashboard (with default config):
 
- Status  Migration ID    Created At           Migration Name
- up     │ 20140711185212 │ 2014-07-11 18:52:12 │ Create documentation pages
- down   │ 20160213170731 │ 2016-02-13 17:07:31 │ Create owners
+```
+         Feb 2026   W06
+ ↑↑    │ 20260202145343 │ 2026-02-02 14:53:43 │ Add weight field to animals          ● animals
+ ↑↑    │ 20260203134528 │ 2026-02-03 13:45:28 │ Create vaccination records           ● vaccination_records
+ ↑↑    │ 20260210183902 │ 2026-02-10 18:39:02 │ Create pet tags              ⤻ Mar 04  ● pet_tags
+───────┼────────────────┼─────────────────────┼──────────────────────────────
+         Mar 2026   W10
+ ↑↑    │ 20260303120000 │ 2026-03-03 12:00:00 │ Add breed restrictions to…   ⤻ Mar 13  ● adoption_policies
+ ↑↑    │ 20260313132325 │ 2026-03-13 13:23:25 │ Create veterinary appointm…  ⎇ PS-142  ● veterinary_appointments
 ```
 
-With git integration enabled (default), you also get author names, landing dates, branch origin badges, affected table names, and calendar month separators.
+Out of the box you get:
+
+- **Calendar separators** — month + ISO week headers to orient you in time
+- **Status aliases** — `↑↑` / `↓↓` instead of `up` / `down` (customizable)
+- **Created At** — timestamp parsed from the migration ID
+- **Landing dates** — `⤻ Mar 04` badge when a migration was merged to main after its creation
+- **Branch badges** — `⎇ WS-955` showing the source branch/ticket
+- **Affected tables** — color-coded table names extracted from migration files
+- **Time filtering** — only the last 70 days shown by default (`since: 70d`)
+- **Your migrations highlighted** — rows authored by you are visually distinct
 
 ### `rails db:migrate:down`
 
