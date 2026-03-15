@@ -153,7 +153,7 @@ module Railbow
         last_cell_plain = strip_ansi(last_cell_raw)
         term_w = terminal_width
         prefix_width = compute_prefix_width(widths, last)
-        last_col_max = term_w ? [term_w - prefix_width, 10].max : nil
+        last_col_max = term_w ? [term_w - prefix_width - display_width(pad), 10].max : nil
 
         # Use custom truncate_fn if available (e.g. table tags with +N)
         if columns[last].truncate_fn && last_col_max &&

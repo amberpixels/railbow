@@ -90,7 +90,26 @@ module Railbow
           end
         end
 
-        # Just +N
+        # Try fitting a truncated first table name + overflow.
+        # Need at least 7 chars: "● t… +N" (dot + color prefix use no visible width beyond the dot)
+        if max_width >= 7
+          suffix = total > 1 ? " +#{total - 1}" : ""
+          # Available width for "● name…" part
+          avail = max_width - display_width(suffix)
+          # "● " prefix = 2 chars visible, plus at least 1 char of name + ellipsis (1 char)
+          if avail >= 4 # "● " (2) + at least 1 char + "…" (1)
+            first_plain = plain_segments[0] # e.g. "● some_table"
+            name_part = first_plain.sub(/^● /, "")
+            # Truncate name to fit: avail - 2 ("● ") - 1 ("…") = chars for name
+            name_max = avail - 2 - 1
+            truncated_name = name_part[0, name_max]
+            color_match = segments[0].match(/\e\[38;5;\d+m/)
+            color = color_match ? color_match[0] : ""
+            return "#{color}● #{truncated_name}…#{RESET}#{suffix}"
+          end
+        end
+
+        # Absolute fallback: just +N
         "+#{total}"
       end
 
