@@ -1,4 +1,6 @@
-# $\textcolor{red}{R}\textcolor{orange}{A}\textcolor{gold}{I}\textcolor{green}{L}\textcolor{dodgerblue}{B}\textcolor{blueviolet}{O}\textcolor{mediumvioletred}{W}$
+<p align="center">
+  <img src="logo.svg" alt="Railbow" width="580">
+</p>
 
 **Make your Rails CLI output beautiful.** Railbow enhances migrations, routes, stats, notes, and more with colorful, emoji-rich, information-dense formatting.
 
@@ -90,7 +92,7 @@ Out of the box you get:
 - **Status aliases** — `↑↑` / `↓↓` instead of `up` / `down` (customizable)
 - **Created At** — timestamp parsed from the migration ID
 - **Landing dates** — `⤻ Mar 04` badge when a migration was merged to main after its creation
-- **Branch badges** — `⎇ WS-955` showing the source branch/ticket
+- **Branch badges** — `⎇ PS-142` showing the source branch/ticket
 - **Affected tables** — color-coded table names extracted from migration files
 - **Time filtering** — only the last 70 days shown by default (`since: 70d`)
 - **Your migrations highlighted** — rows authored by you are visually distinct
