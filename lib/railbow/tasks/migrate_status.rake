@@ -359,7 +359,7 @@ module Railbow
       end
       if author_enabled
         git_email = current_git_email
-        git_name = current_git_name if author_mode == "all"
+        git_name = current_git_name
       end
 
       # Load diff data if needed
@@ -471,17 +471,24 @@ module Railbow
           filepath = version_to_file[version.to_s]
           basename = filepath ? File.basename(filepath) : nil
 
-          # Uncommitted migrations have no git author — treat them as mine
+          # Uncommitted migrations have no git author — treat them as mine.
+          # Match by email first; fall back to author name to handle cases where
+          # the commit email differs from git config (e.g. GitHub noreply emails
+          # after squash-merge, or mailmap rewrites).
           if author_mode == "all"
             author = basename ? author_names[basename] : nil
             row << (author || (basename ? git_name : ""))
             if git_email
               email = author_emails[basename]
-              highlight_rows << idx if email.nil? || email == git_email
+              name = author_names[basename]
+              highlight_rows << idx if email.nil? || email == git_email ||
+                (git_name && name && name.downcase == git_name.downcase)
             end
           elsif author_mode == "me" && basename && git_email
             email = author_emails[basename]
-            highlight_rows << idx if email.nil? || email == git_email
+            name = author_names[basename]
+            highlight_rows << idx if email.nil? || email == git_email ||
+              (git_name && name && name.downcase == git_name.downcase)
           end
         end
 
