@@ -23,6 +23,10 @@ module Railbow
         require "railbow/init"
         Railbow::Init.run
         exit 0
+      when "demo"
+        require_relative "../lib/railbow/demo/runner"
+        Railbow::Demo::Runner.run(args[1] || "status")
+        exit 0
       end
 
       project_gemfile = find_gemfile
@@ -81,8 +85,12 @@ module Railbow
 
         Commands:
           init             Generate a config file (interactive)
+          demo [type]      See railbow in action without a Rails project
+                           Types: status (default), migrate, routes, all
 
         Examples:
+          railbow demo
+          railbow demo routes
           railbow init
           railbow rake db:migrate:status
           railbow rails db:migrate:status
