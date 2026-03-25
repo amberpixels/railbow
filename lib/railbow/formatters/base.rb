@@ -47,6 +47,7 @@ module Railbow
       end
 
       def diff_tag_branch(name) = "\e[38;5;39m\u2387 #{name}#{RESET}"
+      def diff_tag_merging(name) = "\e[38;5;213m\u2B07 #{name}#{RESET}"
 
       def landed_tag(date, fresh: false)
         color = fresh ? "\e[38;5;220m" : DIM

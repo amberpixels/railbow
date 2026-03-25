@@ -200,12 +200,55 @@ module Railbow
       result = Set.new
       output.each_line do |line|
         code = line[0..1]
-        next unless ["??", "A ", "AM", "M "].include?(code)
 
-        filepath = line[3..].strip
+        if code[0] == "R"
+          # Rename: "R  old -> new" or "R100 old -> new"
+          # Extract the destination (new) path
+          parts = line[3..].split(" -> ", 2)
+          filepath = (parts[1] || parts[0]).strip
+        elsif ["??", "A ", "AM", "M "].include?(code)
+          filepath = line[3..].strip
+        else
+          next
+        end
+
         result << File.basename(filepath) unless filepath.empty?
       end
-      result
+
+      # During an in-progress merge, files from MERGE_HEAD (e.g. main) appear
+      # as staged additions. Exclude them so they aren't tagged as ours.
+      result - git_incoming_merge_files(migrate_dir)
+    end
+
+    def detect_merge_source_label(branch_mask)
+      merge_head, status = Open3.capture2("git", "rev-parse", "MERGE_HEAD")
+      return nil unless status.success?
+
+      branches_out, bs = Open3.capture2(
+        "git", "branch", "--contains", merge_head.strip, "--format=%(refname:short)"
+      )
+      return nil unless bs.success?
+
+      branches = branches_out.each_line.map(&:strip).reject(&:empty?)
+      return nil if branches.empty?
+
+      branch = branches.first if branches.size == 1
+      branch ||= branches.find { |b| %w[main master develop].include?(b) }
+      branch ||= branches.first
+
+      apply_branch_mask(branch, branch_mask)
+    end
+
+    def git_incoming_merge_files(migrate_dir)
+      _, mh_status = Open3.capture2("git", "rev-parse", "MERGE_HEAD")
+      return Set.new unless mh_status.success?
+
+      output, status = Open3.capture2(
+        "git", "diff", "--name-only", "--diff-filter=AR", "HEAD", "MERGE_HEAD", "--", migrate_dir
+      )
+      return Set.new unless status.success?
+
+      Set.new(output.each_line.map { |l| File.basename(l.strip) }.reject(&:empty?))
     end
 
     def print_help
@@ -365,9 +408,15 @@ module Railbow
       # Load diff data if needed
       branch_origins = {}
       uncommitted_files = Set.new
+      incoming_merge_files = Set.new
+      merge_source_label = nil
       if diff_enabled && sample_file
         base_branch = detect_default_branch(base_override)
         branch_origins = git_branch_migration_origins(migrate_dir, base_branch, branch_mask)
+        incoming_merge_files = git_incoming_merge_files(migrate_dir)
+        if incoming_merge_files.any?
+          merge_source_label = detect_merge_source_label(branch_mask)
+        end
         uncommitted_files = git_uncommitted_migration_files(migrate_dir)
         # Assign current branch as origin for uncommitted files
         current_branch = current_branch_name(branch_mask)
@@ -425,12 +474,15 @@ module Railbow
           # Diff tag (branch origin badge)
           diff_tag = nil
           if diff_enabled && basename
-            if uncommitted_files.include?(basename)
+            if incoming_merge_files.include?(basename)
+              colored_status = "#{colored_status} \e[38;5;213m\u2B07#{Railbow::Formatters::Base::RESET}"
+              diff_tag = formatter.diff_tag_merging(merge_source_label || "merge")
+            elsif uncommitted_files.include?(basename)
               highlight_rows << idx
               colored_status = "#{colored_status} \e[38;5;220m\u25c6#{Railbow::Formatters::Base::RESET}"
             end
 
-            diff_tag = if branch_origins.key?(basename)
+            diff_tag ||= if branch_origins.key?(basename)
               formatter.diff_tag_branch(branch_origins[basename])
             end
           end
