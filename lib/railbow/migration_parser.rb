@@ -20,6 +20,17 @@ module Railbow
     SINGLE_TABLE_PATTERN = /\b(?:#{SINGLE_TABLE_METHODS.join("|")})\s+[:"](\w+)/
     DUAL_TABLE_PATTERN = /\b(?:#{DUAL_TABLE_METHODS.join("|")})\s+[:"](\w+)["\s,]+[:"](\w+)/
 
+    # SQL keywords followed by a table name
+    SQL_TABLE_PATTERNS = [
+      /\bUPDATE\s+["']?(\w+)["']?/i,
+      /\bINSERT\s+INTO\s+["']?(\w+)["']?/i,
+      /\bDELETE\s+FROM\s+["']?(\w+)["']?/i,
+      /\bALTER\s+TABLE\s+["']?(\w+)["']?/i,
+      /\bTRUNCATE\s+(?:TABLE\s+)?["']?(\w+)["']?/i,
+      /\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["']?(\w+)["']?/i,
+      /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i,
+    ].freeze
+
     def self.extract_tables(filepath)
       return [] if filepath.nil? || filepath.empty?
       return [] unless File.exist?(filepath)
@@ -29,6 +40,9 @@ module Railbow
 
       content.scan(SINGLE_TABLE_PATTERN) { |match| tables << match[0] }
       content.scan(DUAL_TABLE_PATTERN) { |match| tables.concat(match) }
+      SQL_TABLE_PATTERNS.each do |pattern|
+        content.scan(pattern) { |match| tables << match[0] }
+      end
 
       tables.uniq
     end

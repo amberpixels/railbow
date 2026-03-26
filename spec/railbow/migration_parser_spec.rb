@@ -92,5 +92,71 @@ RSpec.describe Railbow::MigrationParser do
     ensure
       file&.unlink
     end
+
+    it "extracts table from execute with UPDATE SQL" do
+      content = <<~RUBY
+        execute <<~SQL.squish
+          UPDATE color_preferences
+          SET colorable_type = 'VisitKind'
+          WHERE colorable_type = 'SchedulerVisitKind'
+        SQL
+      RUBY
+      file = write_migration(content)
+      expect(described_class.extract_tables(file.path)).to eq(["color_preferences"])
+    ensure
+      file&.unlink
+    end
+
+    it "extracts table from execute with INSERT INTO SQL" do
+      content = <<~RUBY
+        execute "INSERT INTO audit_logs (action) VALUES ('migrated')"
+      RUBY
+      file = write_migration(content)
+      expect(described_class.extract_tables(file.path)).to eq(["audit_logs"])
+    ensure
+      file&.unlink
+    end
+
+    it "extracts table from execute with DELETE FROM SQL" do
+      content = <<~RUBY
+        execute "DELETE FROM old_records WHERE created_at < '2020-01-01'"
+      RUBY
+      file = write_migration(content)
+      expect(described_class.extract_tables(file.path)).to eq(["old_records"])
+    ensure
+      file&.unlink
+    end
+
+    it "extracts table from execute with ALTER TABLE SQL" do
+      content = <<~RUBY
+        execute "ALTER TABLE users ADD CONSTRAINT chk_email CHECK (email IS NOT NULL)"
+      RUBY
+      file = write_migration(content)
+      expect(described_class.extract_tables(file.path)).to eq(["users"])
+    ensure
+      file&.unlink
+    end
+
+    it "extracts multiple tables from mixed Ruby DSL and SQL" do
+      content = <<~RUBY
+        add_column :users, :status, :string
+        execute "UPDATE settings SET value = 'new' WHERE key = 'migration'"
+      RUBY
+      file = write_migration(content)
+      expect(described_class.extract_tables(file.path)).to contain_exactly("users", "settings")
+    ensure
+      file&.unlink
+    end
+
+    it "deduplicates tables from SQL and Ruby DSL" do
+      content = <<~RUBY
+        add_column :users, :status, :string
+        execute "UPDATE users SET status = 'active'"
+      RUBY
+      file = write_migration(content)
+      expect(described_class.extract_tables(file.path)).to eq(["users"])
+    ensure
+      file&.unlink
+    end
   end
 end
