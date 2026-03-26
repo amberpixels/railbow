@@ -159,4 +159,16 @@ RSpec.describe Railbow::MigrationParser do
       file&.unlink
     end
   end
+
+  describe ".extract_tables_from_content" do
+    it "extracts tables directly from content string" do
+      content = "create_table :users do |t|\n  t.string :name\nend"
+      expect(described_class.extract_tables_from_content(content)).to eq(["users"])
+    end
+
+    it "returns empty array for nil or empty content" do
+      expect(described_class.extract_tables_from_content(nil)).to eq([])
+      expect(described_class.extract_tables_from_content("")).to eq([])
+    end
+  end
 end

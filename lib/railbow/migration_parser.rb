@@ -35,7 +35,12 @@ module Railbow
       return [] if filepath.nil? || filepath.empty?
       return [] unless File.exist?(filepath)
 
-      content = File.read(filepath)
+      extract_tables_from_content(File.read(filepath))
+    end
+
+    def self.extract_tables_from_content(content)
+      return [] if content.nil? || content.empty?
+
       tables = []
 
       content.scan(SINGLE_TABLE_PATTERN) { |match| tables << match[0] }

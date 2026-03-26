@@ -8,6 +8,8 @@ module Railbow
     class Renderer
       RESET = "\e[0m"
       WHITE = "\e[97m"
+      GHOST_BG = "\e[48;5;52m"    # deep red/maroon background — stands out as abnormal
+      GHOST_FG = "\e[38;5;217m"   # warm pink foreground for contrast
 
       attr_reader :columns, :theme
 
@@ -19,7 +21,7 @@ module Railbow
         @theme = theme
       end
 
-      def render(rows, separators: {}, highlight_rows: Set.new, tick_rows: Set.new, tick_col: nil)
+      def render(rows, separators: {}, highlight_rows: Set.new, ghost_rows: Set.new, tick_rows: Set.new, tick_col: nil)
         return "" if columns.empty?
 
         # Remap rows if columns were hidden
@@ -65,7 +67,7 @@ module Railbow
             lines << render_row(sep_row, resolved, tick_col: tc, tick_cross: true)
             tc = nil # tick already shown on separator row
           end
-          formatted = render_row(row, resolved, tick_col: tc, highlight: highlight_rows.include?(i))
+          formatted = render_row(row, resolved, tick_col: tc, highlight: highlight_rows.include?(i), ghost: ghost_rows.include?(i))
           lines << formatted
         end
         lines.join("\n")
@@ -108,7 +110,7 @@ module Railbow
         }.join(theme.header_col_separator)
       end
 
-      def render_row(row, widths, tick_col: nil, tick_cross: false, highlight: false)
+      def render_row(row, widths, tick_col: nil, tick_cross: false, highlight: false, ghost: false)
         last = columns.size - 1
         pad = effective_padding
         default_sep = theme.col_separator
@@ -119,7 +121,11 @@ module Railbow
           cell_w = display_width(strip_ansi(s))
           padding = " " * [widths[i] - cell_w, 0].max
           content = (columns[i].align == :right) ? "#{padding}#{s}" : "#{s}#{padding}"
-          content = "#{WHITE}#{content}#{RESET}" if highlight
+          if ghost
+            content = "#{GHOST_BG}#{GHOST_FG}#{content}#{RESET}"
+          elsif highlight
+            content = "#{WHITE}#{content}#{RESET}"
+          end
           "#{pad}#{content}#{RESET}#{pad}"
         }
 
@@ -138,10 +144,10 @@ module Railbow
         # Separator before the last column has index (last - 1)
         last_sep_idx = last - 1
         last_sep = (tick_col && (last_sep_idx == tick_col - 1 || last_sep_idx == tick_col)) ? tick_sep : default_sep
-        render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: last_sep, highlight: highlight)
+        render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: last_sep, highlight: highlight, ghost: ghost)
       end
 
-      def render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: nil, highlight: false)
+      def render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: nil, highlight: false, ghost: false)
         pad = effective_padding
         sep = col_sep || theme.col_separator
 
@@ -159,7 +165,7 @@ module Railbow
         if columns[last].truncate_fn && last_col_max &&
             display_width(last_cell_plain) > last_col_max
           last_cell_raw = columns[last].truncate_fn.call(last_cell_raw, last_col_max)
-          last_cell_raw = "#{WHITE}#{last_cell_raw}#{RESET}" if highlight
+          last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost)
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
@@ -167,18 +173,18 @@ module Railbow
         if columns[last].truncate && !columns[last].max_width && last_col_max &&
             display_width(last_cell_plain) > last_col_max
           last_cell_raw = truncate_by_words(last_cell_raw, last_col_max)
-          last_cell_raw = "#{WHITE}#{last_cell_raw}#{RESET}" if highlight
+          last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost)
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
         # In oneline mode, truncate instead of wrapping
         if @compact[:oneline] && last_col_max && display_width(last_cell_plain) > last_col_max
           last_cell_raw = truncate_by_words(last_cell_raw, last_col_max)
-          last_cell_raw = "#{WHITE}#{last_cell_raw}#{RESET}" if highlight
+          last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost)
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
-        last_cell_raw = "#{WHITE}#{last_cell_raw}#{RESET}" if highlight
+        last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost)
 
         if last_col_max && display_width(strip_ansi(last_cell_raw)) > last_col_max
           blank_prefix = prefix_parts.map { |part|
@@ -190,6 +196,16 @@ module Railbow
             wrapped[1..].map { |line| "#{blank_prefix}#{sep}#{pad}#{line}#{RESET}#{pad}" }.join("\n")
         else
           "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
+        end
+      end
+
+      def style_cell(content, highlight: false, ghost: false)
+        if ghost
+          "#{GHOST_BG}#{GHOST_FG}#{content}#{RESET}"
+        elsif highlight
+          "#{WHITE}#{content}#{RESET}"
+        else
+          content
         end
       end
 

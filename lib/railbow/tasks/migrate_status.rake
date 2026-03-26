@@ -423,6 +423,25 @@ module Railbow
         uncommitted_files.each { |f| branch_origins[f] ||= current_branch }
       end
 
+      # Load mighost snapshots for "NO FILE" migrations (if mighost gem is available)
+      mighost_snapshots = {}
+      mighost_available = defined?(Mighost) && Mighost.enabled?
+      if mighost_available
+        no_file_versions = db_list.select { |_, _, n| n.include?("NO FILE") }.map { |_, v, _| v.to_s }
+        no_file_versions.each do |v|
+          snapshot = begin
+            if Mighost::Snapshot.respond_to?(:find_or_recover)
+              Mighost::Snapshot.find_or_recover(v)
+            else
+              Mighost::Snapshot.find_by_version(v)
+            end
+          rescue
+            nil
+          end
+          mighost_snapshots[v] = snapshot if snapshot&.filename && !snapshot.filename.empty?
+        end
+      end
+
       # Build columns
       # Latest migration ID date — used to determine "fresh" landed badges
       latest_version = db_list.last&.dig(1).to_s
@@ -457,15 +476,43 @@ module Railbow
         table_columns << Railbow::Table::Column.new(label: "Tables", truncate: nowrap_enabled, truncate_fn: tables_truncate_fn)
       end
 
-      # Build rows and track highlight indices for AUTHOR=me
+      # Build rows and track highlight/ghost indices
       highlight_rows = Set.new
+      ghost_rows = Set.new
       rows = db_list.each_with_index.map do |(status, version, name), idx|
         colored_status = case status
         when "up" then formatter.green_bold("up")
         when "down" then formatter.yellow_bold("down")
         else status
         end
-        display_name = name.include?("NO FILE") ? formatter.red("NO FILE") : name
+        ghost_snapshot = name.include?("NO FILE") ? mighost_snapshots[version.to_s] : nil
+        if name.include?("NO FILE") && ghost_snapshot
+          ghost_rows << idx
+          # Mighost recovered this ghost migration — show 👻 status + name + branch badge
+          colored_status = "👻"
+          ghost_name = ghost_snapshot.filename
+            .sub(/\A\d+_/, "")    # strip version prefix
+            .sub(/\.rb\z/, "")    # strip extension
+            .tr("_", " ")
+            .gsub(/\b\w/, &:upcase) # titleize
+          branch_tag = ghost_snapshot.branch_name ? "\e[38;5;222m⌥ #{ghost_snapshot.branch_name}\e[38;5;217m" : nil
+          if branch_tag && name_col_width
+            tag_width = formatter.display_width(formatter.strip_ansi(branch_tag))
+            available = name_col_width - tag_width - 2
+            ghost_name = formatter.truncate_str(ghost_name, available)
+            name_width = formatter.display_width(ghost_name)
+            padding = name_col_width - name_width - tag_width
+            display_name = "#{ghost_name}#{" " * [padding, 2].max}#{branch_tag}"
+          elsif branch_tag
+            display_name = "#{ghost_name}  #{branch_tag}"
+          else
+            display_name = ghost_name
+          end
+        elsif name.include?("NO FILE")
+          display_name = formatter.red("NO FILE")
+        else
+          display_name = name
+        end
 
         if !name.include?("NO FILE")
           filepath = version_to_file[version.to_s]
@@ -520,32 +567,51 @@ module Railbow
         row = [colored_status, version.to_s, created_at, display_name]
 
         if author_enabled
-          filepath = version_to_file[version.to_s]
-          basename = filepath ? File.basename(filepath) : nil
+          if ghost_snapshot
+            # Use mighost snapshot author data for ghost migrations
+            if author_mode == "all"
+              ghost_author = ghost_snapshot.respond_to?(:author_name) ? ghost_snapshot.author_name : nil
+              row << Railbow::Params.format_author(ghost_author || "")
+              if git_email && ghost_snapshot.respond_to?(:author_email)
+                ghost_email = ghost_snapshot.author_email&.downcase
+                highlight_rows << idx if ghost_email && ghost_email == git_email
+              end
+            elsif author_mode == "me" && git_email && ghost_snapshot.respond_to?(:author_email)
+              ghost_email = ghost_snapshot.author_email&.downcase
+              highlight_rows << idx if ghost_email && ghost_email == git_email
+            end
+          else
+            filepath = version_to_file[version.to_s]
+            basename = filepath ? File.basename(filepath) : nil
 
-          # Uncommitted migrations have no git author — treat them as mine.
-          # Match by email first; fall back to author name to handle cases where
-          # the commit email differs from git config (e.g. GitHub noreply emails
-          # after squash-merge, or mailmap rewrites).
-          if author_mode == "all"
-            author = basename ? author_names[basename] : nil
-            row << Railbow::Params.format_author(author || (basename ? git_name : ""))
-            if git_email
+            # Uncommitted migrations have no git author — treat them as mine.
+            # Match by email first; fall back to author name to handle cases where
+            # the commit email differs from git config (e.g. GitHub noreply emails
+            # after squash-merge, or mailmap rewrites).
+            if author_mode == "all"
+              author = basename ? author_names[basename] : nil
+              row << Railbow::Params.format_author(author || (basename ? git_name : ""))
+              if git_email
+                email = author_emails[basename]
+                name = author_names[basename]
+                highlight_rows << idx if email.nil? || email == git_email ||
+                  (git_name && name && name.downcase == git_name.downcase)
+              end
+            elsif author_mode == "me" && basename && git_email
               email = author_emails[basename]
               name = author_names[basename]
               highlight_rows << idx if email.nil? || email == git_email ||
                 (git_name && name && name.downcase == git_name.downcase)
             end
-          elsif author_mode == "me" && basename && git_email
-            email = author_emails[basename]
-            name = author_names[basename]
-            highlight_rows << idx if email.nil? || email == git_email ||
-              (git_name && name && name.downcase == git_name.downcase)
           end
         end
 
         if tables_enabled
-          tables = Railbow::MigrationParser.extract_tables(version_to_file[version.to_s])
+          tables = if ghost_snapshot&.content && !ghost_snapshot.content.empty?
+            Railbow::MigrationParser.extract_tables_from_content(ghost_snapshot.content)
+          else
+            Railbow::MigrationParser.extract_tables(version_to_file[version.to_s])
+          end
           row << formatter.table_tags(tables)
         end
 
@@ -599,7 +665,7 @@ module Railbow
         aliases: Railbow::Config.table_aliases
       )
       tick_col = 2 # Date column index
-      puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows, tick_rows: tick_rows, tick_col: tick_col)
+      puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows, ghost_rows: ghost_rows, tick_rows: tick_rows, tick_col: tick_col)
     end
   end
 end
