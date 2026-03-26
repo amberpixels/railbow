@@ -139,6 +139,39 @@ module Railbow
       (val == true) ? "all" : val.strip.downcase
     end
 
+    def author_format
+      ENV["RBW_AUTHOR_FORMAT"] || Config.load["author_format"] || "initials"
+    end
+
+    # Format an author name according to author_format setting.
+    # Format an author name according to author_format setting.
+    # "initials"         → "John Doe" → "JD"
+    # "first_name"       → "John Doe" → "John"
+    # "last_name"        → "John Doe" → "Doe"
+    # "full_name"        → unchanged
+    # "full_name_short"  → "John Doe" → "John D."
+    def format_author(name)
+      return "" if name.nil? || name.empty?
+
+      parts = name.split(/[\s._-]+/)
+      case author_format
+      when "initials"
+        parts.map { |p| p[0]&.upcase }.compact.join(" ")
+      when "first_name"
+        parts.first
+      when "last_name"
+        parts.last
+      when "full_name_short"
+        if parts.size > 1
+          "#{parts.first} #{parts[1..].map { |p| "#{p[0].upcase}." }.join}"
+        else
+          name
+        end
+      else
+        name
+      end
+    end
+
     def git_diff?
       git["diff"] == true
     end

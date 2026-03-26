@@ -28,7 +28,7 @@ module Railbow
       /\bALTER\s+TABLE\s+["']?(\w+)["']?/i,
       /\bTRUNCATE\s+(?:TABLE\s+)?["']?(\w+)["']?/i,
       /\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["']?(\w+)["']?/i,
-      /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i,
+      /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i
     ].freeze
 
     def self.extract_tables(filepath)

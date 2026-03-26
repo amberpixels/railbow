@@ -94,7 +94,7 @@ module Railbow
         # Try fitting a truncated first table name + overflow.
         # Need at least 7 chars: "● t… +N" (dot + color prefix use no visible width beyond the dot)
         if max_width >= 7
-          suffix = total > 1 ? " +#{total - 1}" : ""
+          suffix = (total > 1) ? " +#{total - 1}" : ""
           # Available width for "● name…" part
           avail = max_width - display_width(suffix)
           # "● " prefix = 2 chars visible, plus at least 1 char of name + ellipsis (1 char)

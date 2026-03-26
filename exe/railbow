@@ -31,14 +31,14 @@ module Railbow
 
       project_gemfile = find_gemfile
       unless project_gemfile
-        $stderr.puts "Error: Could not find a Gemfile in the current directory or any parent directory."
+        warn "Error: Could not find a Gemfile in the current directory or any parent directory."
         exit 1
       end
 
       wrapper_path = create_wrapper_gemfile(project_gemfile)
       symlink_lockfile(project_gemfile, wrapper_path)
 
-      env = { "BUNDLE_GEMFILE" => wrapper_path }
+      env = {"BUNDLE_GEMFILE" => wrapper_path}
       Kernel.exec(env, "bundle", "exec", *args)
     end
 

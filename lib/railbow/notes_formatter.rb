@@ -138,10 +138,11 @@ module Railbow
         loc_line = " #{colored_bar} #{location}"
 
         if author_mode == "all" && blame_info
-          author_name = blame_info[:author] || ""
+          raw_author = blame_info[:author] || ""
+          author_name = Railbow::Params.format_author(raw_author)
           blame_date = blame_info[:date] ? blame_info[:date].strftime("%Y-%m-%d") : ""
           padding = " " * [(max_loc_width - location.length + 2), 2].max
-          colored_author = "#{author_colors.color_for(author_name)}#{author_name}#{RESET}"
+          colored_author = "#{author_colors.color_for(raw_author)}#{author_name}#{RESET}"
           meta = "#{colored_author}  #{DIM}#{blame_date}#{RESET}"
           loc_line = " #{colored_bar} #{location}#{padding}#{meta}"
         elsif author_mode == "me" && is_mine && blame_info

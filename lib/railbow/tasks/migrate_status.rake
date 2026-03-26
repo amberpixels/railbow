@@ -451,7 +451,7 @@ module Railbow
           max_width: name_col_width,
           truncate: needs_name_truncation)
       ]
-      table_columns << Railbow::Table::Column.new(label: "Author") if author_mode == "all"
+      table_columns << Railbow::Table::Column.new(label: "Who") if author_mode == "all"
       if tables_enabled
         tables_truncate_fn = ->(cell_raw, max_w) { formatter.table_tags_fitted(cell_raw, max_w) }
         table_columns << Railbow::Table::Column.new(label: "Tables", truncate: nowrap_enabled, truncate_fn: tables_truncate_fn)
@@ -529,7 +529,7 @@ module Railbow
           # after squash-merge, or mailmap rewrites).
           if author_mode == "all"
             author = basename ? author_names[basename] : nil
-            row << (author || (basename ? git_name : ""))
+            row << Railbow::Params.format_author(author || (basename ? git_name : ""))
             if git_email
               email = author_emails[basename]
               name = author_names[basename]

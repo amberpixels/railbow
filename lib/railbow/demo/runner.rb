@@ -11,8 +11,8 @@ module Railbow
       def self.run(subcommand = "status")
         subcommand = subcommand.to_s.downcase
         unless SUBCOMMANDS.include?(subcommand)
-          $stderr.puts "Unknown demo: #{subcommand}"
-          $stderr.puts "Available: #{SUBCOMMANDS.join(", ")}"
+          warn "Unknown demo: #{subcommand}"
+          warn "Available: #{SUBCOMMANDS.join(", ")}"
           exit 1
         end
 

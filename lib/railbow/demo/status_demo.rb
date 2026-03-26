@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "date"
-require "set"
 require_relative "../formatters/base"
 require_relative "../table"
 require_relative "../config"
@@ -23,9 +22,6 @@ module Railbow
 
         # Use default config: author:me, diff, calendar, tables, wticks, full date
         date_format = "full"
-        author_mode = "me"
-        calendar_enabled = true
-        ticks_enabled = true
         tables_enabled = true
         diff_enabled = true
 

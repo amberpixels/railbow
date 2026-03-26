@@ -33,7 +33,11 @@ module Railbow
       #   base:<branch> — base branch for diff (default: auto-detected)
       #   mask:auto    — auto-extract ticket id from branch name
       #   mask:<re>    — custom regex to extract branch label, e.g. mask:(PS-[^/]+)/
-      git: "author:me,diff,mask:auto"
+      git: "author:all,diff,mask:auto"
+
+      # Author display format: initials (JD), first_name (John), last_name (Doe),
+      #   full_name (John Doe), full_name_short (John D.)
+      author_format: "initials"
 
       # View mode (comma-separated): calendar, tables
       view: "calendar,tables"

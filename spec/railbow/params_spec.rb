@@ -15,6 +15,7 @@ RSpec.describe Railbow::Params do
     ENV.delete("RBW_VIEW")
     ENV.delete("RBW_DATE")
     ENV.delete("RBW_CALENDAR")
+    ENV.delete("RBW_AUTHOR_FORMAT")
   end
 
   describe ".parse_compound" do
@@ -155,8 +156,8 @@ RSpec.describe Railbow::Params do
   end
 
   describe "git compound accessors" do
-    it "defaults git_author to 'me'" do
-      expect(described_class.git_author).to eq("me")
+    it "defaults git_author to 'all'" do
+      expect(described_class.git_author).to eq("all")
     end
 
     it "bare 'author' defaults to 'all'" do
@@ -195,6 +196,45 @@ RSpec.describe Railbow::Params do
       expect(described_class.git_author).to eq("me")
       expect(described_class.git_diff?).to be true
       expect(described_class.git_base).to eq("develop")
+    end
+  end
+
+  describe ".format_author" do
+    before { Railbow::Config.reset! }
+
+    it "formats as initials" do
+      ENV["RBW_AUTHOR_FORMAT"] = "initials"
+      expect(described_class.format_author("John Doe")).to eq("J D")
+      expect(described_class.format_author("alice")).to eq("A")
+    end
+
+    it "formats as first_name" do
+      ENV["RBW_AUTHOR_FORMAT"] = "first_name"
+      expect(described_class.format_author("John Doe")).to eq("John")
+      expect(described_class.format_author("alice")).to eq("alice")
+    end
+
+    it "formats as last_name" do
+      ENV["RBW_AUTHOR_FORMAT"] = "last_name"
+      expect(described_class.format_author("John Doe")).to eq("Doe")
+      expect(described_class.format_author("alice")).to eq("alice")
+    end
+
+    it "formats as full_name" do
+      ENV["RBW_AUTHOR_FORMAT"] = "full_name"
+      expect(described_class.format_author("John Doe")).to eq("John Doe")
+    end
+
+    it "formats as full_name_short" do
+      ENV["RBW_AUTHOR_FORMAT"] = "full_name_short"
+      expect(described_class.format_author("John Doe")).to eq("John D.")
+      expect(described_class.format_author("John Michael Doe")).to eq("John M.D.")
+      expect(described_class.format_author("alice")).to eq("alice")
+    end
+
+    it "returns empty string for nil or empty" do
+      expect(described_class.format_author(nil)).to eq("")
+      expect(described_class.format_author("")).to eq("")
     end
   end
 
