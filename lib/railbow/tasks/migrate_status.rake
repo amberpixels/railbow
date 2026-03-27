@@ -221,10 +221,10 @@ module Railbow
     end
 
     def detect_merge_source_label(branch_mask)
-      merge_head, status = Open3.capture2("git", "rev-parse", "MERGE_HEAD")
+      merge_head, _, status = Open3.capture3("git", "rev-parse", "MERGE_HEAD")
       return nil unless status.success?
 
-      branches_out, bs = Open3.capture2(
+      branches_out, _, bs = Open3.capture3(
         "git", "branch", "--contains", merge_head.strip, "--format=%(refname:short)"
       )
       return nil unless bs.success?
@@ -240,10 +240,10 @@ module Railbow
     end
 
     def git_incoming_merge_files(migrate_dir)
-      _, mh_status = Open3.capture2("git", "rev-parse", "MERGE_HEAD")
+      _, _, mh_status = Open3.capture3("git", "rev-parse", "MERGE_HEAD")
       return Set.new unless mh_status.success?
 
-      output, status = Open3.capture2(
+      output, _, status = Open3.capture3(
         "git", "diff", "--name-only", "--diff-filter=AR", "HEAD", "MERGE_HEAD", "--", migrate_dir
       )
       return Set.new unless status.success?
@@ -507,7 +507,13 @@ module Railbow
             .sub(/\.rb\z/, "")    # strip extension
             .tr("_", " ")
             .gsub(/\b\w/, &:upcase) # titleize
-          branch_tag = ghost_snapshot.branch_name ? "\e[38;5;222m⌥ #{ghost_snapshot.branch_name}\e[38;5;217m" : nil
+          if ghost_snapshot.branch_name
+            branch_tag = if ghost_snapshot.respond_to?(:source) && ghost_snapshot.source == "worktree"
+              "\e[38;5;222m⌥ₜ#{ghost_snapshot.branch_name}\e[38;5;217m"
+            else
+              "\e[38;5;222m⌥ #{ghost_snapshot.branch_name}\e[38;5;217m"
+            end
+          end
           if branch_tag && name_col_width
             tag_width = formatter.display_width(formatter.strip_ansi(branch_tag))
             available = name_col_width - tag_width - 2
