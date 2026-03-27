@@ -64,7 +64,7 @@ RSpec.describe Railbow::Init do
       content = File.read(File.join(dir, ".railbow.yml"))
       expect(content).to include('since: "70d"')
       expect(content).to include('git: "author:all,diff,mask:auto"')
-      expect(content).to include('author_format: "initials"')
+      expect(content).to include('author_format: "short"')
       expect(content).to include('view: "calendar,tables"')
       expect(content).to include('calendar: "wticks"')
       expect(content).to include("aliases:")

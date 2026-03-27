@@ -15,7 +15,7 @@ module Railbow
       },
       "since" => "70d",
       "git" => "author:all,diff,mask:auto",
-      "author_format" => "full_name_short",
+      "author_format" => "short",
       "view" => "calendar,tables",
       "calendar" => "wticks"
     }.freeze

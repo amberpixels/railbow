@@ -35,9 +35,10 @@ module Railbow
       #   mask:<re>    — custom regex to extract branch label, e.g. mask:(PS-[^/]+)/
       git: "author:all,diff,mask:auto"
 
-      # Author display format: initials (JD), first_name (John), last_name (Doe),
+      # Author display format — preset or custom pattern (FF L, FFF LL, etc.):
+      #   initials (J D), short (Jo D), first_name (John), last_name (Doe),
       #   full_name (John Doe), full_name_short (John D.)
-      author_format: "initials"
+      author_format: "short"
 
       # View mode (comma-separated): calendar, tables
       view: "calendar,tables"

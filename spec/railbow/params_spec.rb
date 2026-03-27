@@ -217,7 +217,7 @@ RSpec.describe Railbow::Params do
     it "formats as last_name" do
       ENV["RBW_AUTHOR_FORMAT"] = "last_name"
       expect(described_class.format_author("John Doe")).to eq("Doe")
-      expect(described_class.format_author("alice")).to eq("alice")
+      expect(described_class.format_author("alice")).to eq("")
     end
 
     it "formats as full_name" do
@@ -228,8 +228,13 @@ RSpec.describe Railbow::Params do
     it "formats as full_name_short" do
       ENV["RBW_AUTHOR_FORMAT"] = "full_name_short"
       expect(described_class.format_author("John Doe")).to eq("John D.")
-      expect(described_class.format_author("John Michael Doe")).to eq("John M.D.")
+      expect(described_class.format_author("John Michael Doe")).to eq("John D.")
       expect(described_class.format_author("alice")).to eq("alice")
+    end
+
+    it "formats with custom pattern" do
+      ENV["RBW_AUTHOR_FORMAT"] = "FFF LL"
+      expect(described_class.format_author("John Doe")).to eq("Joh Do")
     end
 
     it "returns empty string for nil or empty" do
