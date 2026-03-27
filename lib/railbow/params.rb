@@ -3,6 +3,7 @@
 require "date"
 require_relative "config"
 require_relative "name_formatter"
+require_relative "name_collision_resolver"
 
 module Railbow
   module Params
@@ -141,7 +142,7 @@ module Railbow
     end
 
     def author_format
-      ENV["RBW_AUTHOR_FORMAT"] || Config.load["author_format"] || "initials"
+      ENV["RBW_AUTHOR_FORMAT"] || Config.load["author_format"] || "short"
     end
 
     # Format an author name using NameFormatter.
@@ -149,6 +150,12 @@ module Railbow
     # custom patterns ("FF L", "FFFF L.", "LLLL, FFFF").
     def format_author(name)
       NameFormatter.format(name, author_format)
+    end
+
+    # Format a batch of author names with collision resolution.
+    # Returns Hash{String => String} mapping raw names to disambiguated formatted names.
+    def format_authors(names)
+      NameCollisionResolver.resolve(names, author_format)
     end
 
     def git_diff?

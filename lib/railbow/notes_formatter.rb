@@ -94,9 +94,11 @@ module Railbow
       show_date = git_needed
       max_loc_width = 0
       author_colors = nil
+      author_display = {}
       if author_mode == "all"
         author_names = entries.filter_map { |e| e.dig(:blame, :author) }.uniq
         author_colors = ColorAssigner.new(author_names)
+        author_display = Railbow::Params.format_authors(author_names)
       end
       if show_date || author_mode == "all"
         entries.each do |entry|
@@ -139,7 +141,7 @@ module Railbow
 
         if author_mode == "all" && blame_info
           raw_author = blame_info[:author] || ""
-          author_name = Railbow::Params.format_author(raw_author)
+          author_name = author_display[raw_author] || Railbow::Params.format_author(raw_author)
           blame_date = blame_info[:date] ? blame_info[:date].strftime("%Y-%m-%d") : ""
           padding = " " * [(max_loc_width - location.length + 2), 2].max
           colored_author = "#{author_colors.color_for(raw_author)}#{author_name}#{RESET}"

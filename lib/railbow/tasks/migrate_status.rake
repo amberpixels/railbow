@@ -476,6 +476,18 @@ module Railbow
         table_columns << Railbow::Table::Column.new(label: "Tables", truncate: nowrap_enabled, truncate_fn: tables_truncate_fn)
       end
 
+      # Pre-resolve author name collisions for the "Who" column
+      author_display = if author_mode == "all"
+        all_raw_authors = author_names.values.compact
+        all_raw_authors << git_name if git_name
+        mighost_snapshots.each_value do |snap|
+          all_raw_authors << snap.author_name if snap.respond_to?(:author_name) && snap.author_name
+        end
+        Railbow::Params.format_authors(all_raw_authors)
+      else
+        {}
+      end
+
       # Build rows and track highlight/ghost indices
       highlight_rows = Set.new
       ghost_rows = Set.new
@@ -571,7 +583,8 @@ module Railbow
             # Use mighost snapshot author data for ghost migrations
             if author_mode == "all"
               ghost_author = ghost_snapshot.respond_to?(:author_name) ? ghost_snapshot.author_name : nil
-              row << Railbow::Params.format_author(ghost_author || "")
+              raw = ghost_author || ""
+              row << (author_display[raw] || Railbow::Params.format_author(raw))
               if git_email && ghost_snapshot.respond_to?(:author_email)
                 ghost_email = ghost_snapshot.author_email&.downcase
                 highlight_rows << idx if ghost_email && ghost_email == git_email
@@ -590,7 +603,8 @@ module Railbow
             # after squash-merge, or mailmap rewrites).
             if author_mode == "all"
               author = basename ? author_names[basename] : nil
-              row << Railbow::Params.format_author(author || (basename ? git_name : ""))
+              raw = author || (basename ? git_name : "")
+              row << (author_display[raw] || Railbow::Params.format_author(raw))
               if git_email
                 email = author_emails[basename]
                 name = author_names[basename]
