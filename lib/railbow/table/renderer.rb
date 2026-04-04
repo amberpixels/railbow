@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 require "io/console"
-require "unicode/display_width"
+require_relative "../text_utils"
 
 module Railbow
   module Table
     class Renderer
+      include TextUtils
+
       RESET = "\e[0m"
       WHITE = "\e[97m"
       GHOST_BG = "\e[48;5;52m"    # deep red/maroon background — stands out as abnormal
@@ -224,21 +226,6 @@ module Railbow
         total
       end
 
-      def truncate_str(str, max_width)
-        return str if display_width(strip_ansi(str)) <= max_width
-
-        plain = strip_ansi(str)
-        truncated = +""
-        width = 0
-        plain.each_char do |ch|
-          ch_width = display_width(ch)
-          break if width + ch_width > max_width - 3
-          truncated << ch
-          width += ch_width
-        end
-        "#{truncated}..."
-      end
-
       def truncate_by_words(str, max_width)
         return str if display_width(strip_ansi(str)) <= max_width
 
@@ -266,14 +253,6 @@ module Railbow
         nil
       rescue
         nil
-      end
-
-      def strip_ansi(str)
-        str.to_s.gsub(/\e\[[0-9;]*m/, "")
-      end
-
-      def display_width(str)
-        Unicode::DisplayWidth.of(str.to_s)
       end
 
       def ansi_word_wrap(str, max_width)

@@ -169,7 +169,11 @@ module Railbow
           tag_str = "#{WHITE}#{tag}#{RESET} "
         end
 
-        term_w = ($stdout.tty? && $stdout.respond_to?(:winsize)) ? $stdout.winsize[1] : 120
+        term_w = begin
+          ($stdout.tty? && $stdout.respond_to?(:winsize)) ? $stdout.winsize[1] : 120
+        rescue
+          120
+        end
         max_note_width = [term_w - indent_width, 20].max
 
         if note.length <= max_note_width

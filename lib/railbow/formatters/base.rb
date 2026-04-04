@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
-require "unicode/display_width"
 require "zlib"
+require_relative "../text_utils"
 
 module Railbow
   module Formatters
     class Base
+      include TextUtils
+
       RESET = "\e[0m"
       BOLD = "\e[1m"
       GREEN = "\e[32m"
@@ -189,29 +191,6 @@ module Railbow
       end
 
       public
-
-      def truncate_str(str, max_width)
-        return str if display_width(strip_ansi(str)) <= max_width
-
-        plain = strip_ansi(str)
-        truncated = +""
-        width = 0
-        plain.each_char do |ch|
-          ch_width = display_width(ch)
-          break if width + ch_width > max_width - 3
-          truncated << ch
-          width += ch_width
-        end
-        "#{truncated}..."
-      end
-
-      def strip_ansi(str)
-        str.gsub(/\e\[[0-9;]*m/, "")
-      end
-
-      def display_width(str)
-        Unicode::DisplayWidth.of(str)
-      end
     end
   end
 end
