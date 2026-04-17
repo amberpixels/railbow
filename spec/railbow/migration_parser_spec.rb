@@ -171,4 +171,53 @@ RSpec.describe Railbow::MigrationParser do
       expect(described_class.extract_tables_from_content("")).to eq([])
     end
   end
+
+  describe "model-based table detection" do
+    it "infers table name from ActiveRecord model with find_each" do
+      content = <<~RUBY
+        class RemapSettings < ActiveRecord::Migration[8.1]
+          def up
+            Setting.find_each { |s| s.update_column(:x, 1) }
+          end
+        end
+      RUBY
+      expect(described_class.extract_tables_from_content(content)).to eq(["settings"])
+    end
+
+    it "pluralizes CamelCase model names" do
+      content = "OrderItem.where(active: true).update_all(active: false)"
+      expect(described_class.extract_tables_from_content(content)).to eq(["order_items"])
+    end
+
+    it "uses last namespace segment for scoped models" do
+      content = "Billing::Invoice.find_each { |i| i.save! }"
+      expect(described_class.extract_tables_from_content(content)).to eq(["invoices"])
+    end
+
+    it "skips model detection when DDL already found ≥2 tables" do
+      content = <<~RUBY
+        add_column :users, :status, :string
+        add_column :posts, :status, :string
+        Setting.find_each { |s| s.update_column(:x, 1) }
+      RUBY
+      expect(described_class.extract_tables_from_content(content)).to contain_exactly("users", "posts")
+    end
+
+    it "supplements a single DDL table with one model table (capped at 2)" do
+      content = <<~RUBY
+        add_column :users, :status, :string
+        Setting.find_each { |s| s.update_column(:x, 1) }
+        Audit.find_each { |a| a.destroy }
+      RUBY
+      # users from DDL, settings from first matching model call; Audit dropped (cap = 2).
+      # Note: `Audit.find_each` would match the pattern but only `find_each` is hit first
+      # for Setting; we stop after adding settings.
+      expect(described_class.extract_tables_from_content(content)).to eq(["users", "settings"])
+    end
+
+    it "does not match instance-method calls on lowercase receivers" do
+      content = "s.update_column(:x, 1)"
+      expect(described_class.extract_tables_from_content(content)).to eq([])
+    end
+  end
 end
