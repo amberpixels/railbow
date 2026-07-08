@@ -9,3 +9,9 @@
 *.gem
 Gemfile.lock
 .zed
+
+# Internal planning notes
+plan*.md
+
+# RSpec persistence
+spec/examples.txt
