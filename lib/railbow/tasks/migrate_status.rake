@@ -425,18 +425,12 @@ module Railbow
 
       # Load mighost snapshots for "NO FILE" migrations (if mighost gem is available)
       mighost_snapshots = {}
-      mighost_available = defined?(Mighost) && Mighost.enabled?
+      mighost_available = defined?(Mighost::API) && Mighost.enabled?
       if mighost_available
         no_file_versions = db_list.select { |_, _, n| n.include?("NO FILE") }.map { |_, v, _| v.to_s }
         no_file_versions.each do |v|
           snapshot = begin
-            if defined?(Mighost::API)
-              Mighost::API.find_or_recover_snapshot(v)
-            elsif Mighost::Snapshot.respond_to?(:find_or_recover)
-              Mighost::Snapshot.find_or_recover(v)
-            else
-              Mighost::Snapshot.find_by_version(v)
-            end
+            Mighost::API.find_or_recover_snapshot(v)
           rescue
             nil
           end

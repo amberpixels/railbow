@@ -10,3 +10,6 @@ gem "rake", "~> 13.4"
 gem "rspec", "~> 3.13"
 gem "benchmark", "~> 0.5"
 gem "standard", "~> 1.54"
+
+# Optional integration: recovers ghost migrations in migrate:status
+gem "mighost", "~> 0.4"
