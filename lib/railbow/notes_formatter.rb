@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 require "zlib"
-require "open3"
 require "date"
+require_relative "git_utils"
 require_relative "formatters/base"
 require_relative "logo"
 require_relative "color_assigner"
@@ -203,7 +203,7 @@ module Railbow
     def blame_file(path)
       return {} unless File.exist?(path)
 
-      output, status = Open3.capture2("git", "blame", "--porcelain", path)
+      output, status = Railbow::GitUtils.capture2("blame", "--porcelain", path)
       return {} unless status.success?
 
       result = {}
@@ -241,7 +241,7 @@ module Railbow
     end
 
     def current_git_email
-      output, _status = Open3.capture2("git", "config", "user.email")
+      output, _status = Railbow::GitUtils.capture2("config", "user.email")
       output.strip.downcase
     end
 

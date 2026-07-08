@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "date"
-require "open3"
+require_relative "../git_utils"
 require_relative "../formatters/base"
 require_relative "../migration_parser"
 require_relative "../config"
@@ -15,8 +15,8 @@ module Railbow
     private
 
     def git_migration_authors(migrate_dir)
-      output, _status = Open3.capture2(
-        "git", "log", "--format=COMMIT:%aN\t%aE", "--diff-filter=AR", "--name-status", "--", migrate_dir
+      output, _status = Railbow::GitUtils.capture2(
+        "log", "--format=COMMIT:%aN\t%aE", "--diff-filter=AR", "--name-status", "--", migrate_dir
       )
       return {names: {}, emails: {}} if output.empty?
 
@@ -52,8 +52,8 @@ module Railbow
     # Returns a hash of basename → Date for when each migration file
     # first appeared on the mainline (merge commit date via --first-parent).
     def git_migration_landed_dates(migrate_dir)
-      output, _status = Open3.capture2(
-        "git", "log", "--first-parent", "--format=COMMIT:%cI", "--diff-filter=AR", "--name-status", "--", migrate_dir
+      output, _status = Railbow::GitUtils.capture2(
+        "log", "--first-parent", "--format=COMMIT:%cI", "--diff-filter=AR", "--name-status", "--", migrate_dir
       )
       return {} if output.empty?
 
@@ -79,12 +79,12 @@ module Railbow
     end
 
     def current_git_email
-      output, _status = Open3.capture2("git", "config", "user.email")
+      output, _status = Railbow::GitUtils.capture2("config", "user.email")
       output.strip.downcase
     end
 
     def current_git_name
-      output, _status = Open3.capture2("git", "config", "user.name")
+      output, _status = Railbow::GitUtils.capture2("config", "user.name")
       output.strip
     end
 
@@ -93,12 +93,17 @@ module Railbow
 
       return Railbow::Params.extract_branch_ticket(branch) if branch_mask == "auto"
 
-      m = branch.match(Regexp.new(branch_mask, Regexp::IGNORECASE))
+      re = begin
+        Regexp.new(branch_mask, Regexp::IGNORECASE)
+      rescue RegexpError
+        return branch
+      end
+      m = branch.match(re)
       (m && m[1]) ? m[1] : branch
     end
 
     def current_branch_name(branch_mask)
-      output, status = Open3.capture2("git", "rev-parse", "--abbrev-ref", "HEAD")
+      output, status = Railbow::GitUtils.capture2("rev-parse", "--abbrev-ref", "HEAD")
       return "HEAD" unless status.success?
 
       apply_branch_mask(output.strip, branch_mask)
@@ -107,14 +112,14 @@ module Railbow
     def detect_default_branch(override)
       return override if override && !override.empty?
 
-      output, status = Open3.capture2("git", "symbolic-ref", "refs/remotes/origin/HEAD")
+      output, status = Railbow::GitUtils.capture2("symbolic-ref", "refs/remotes/origin/HEAD")
       if status.success?
         branch = output.strip.sub(%r{^refs/remotes/origin/}, "")
         return branch unless branch.empty?
       end
 
       %w[main master].each do |candidate|
-        _, st = Open3.capture2("git", "rev-parse", "--verify", "refs/heads/#{candidate}")
+        _, st = Railbow::GitUtils.capture2("rev-parse", "--verify", "refs/heads/#{candidate}")
         return candidate if st.success?
       end
 
@@ -122,12 +127,12 @@ module Railbow
     end
 
     def git_branch_migration_origins(migrate_dir, base_branch, branch_mask)
-      merge_base_out, mb_status = Open3.capture2("git", "merge-base", "HEAD", base_branch)
+      merge_base_out, mb_status = Railbow::GitUtils.capture2("merge-base", "HEAD", base_branch)
       return {} unless mb_status.success?
 
       merge_base = merge_base_out.strip
-      diff_out, diff_status = Open3.capture2(
-        "git", "diff", "--name-status", "--diff-filter=AR", merge_base, "HEAD", "--", migrate_dir
+      diff_out, diff_status = Railbow::GitUtils.capture2(
+        "diff", "--name-status", "--diff-filter=AR", merge_base, "HEAD", "--", migrate_dir
       )
       return {} unless diff_status.success?
 
@@ -141,16 +146,16 @@ module Railbow
         basename = File.basename(filepath)
 
         # Find the commit that added or renamed this file
-        commit_out, cs = Open3.capture2(
-          "git", "log", "--diff-filter=AR", "--format=%H", "-1", "--", filepath
+        commit_out, cs = Railbow::GitUtils.capture2(
+          "log", "--diff-filter=AR", "--format=%H", "-1", "--", filepath
         )
         next unless cs.success?
         commit = commit_out.strip
         next if commit.empty?
 
         # Find branches containing this commit
-        branches_out, bs = Open3.capture2(
-          "git", "branch", "--contains", commit, "--format=%(refname:short)"
+        branches_out, bs = Railbow::GitUtils.capture2(
+          "branch", "--contains", commit, "--format=%(refname:short)"
         )
         next unless bs.success?
         branches = branches_out.each_line.map(&:strip).reject(&:empty?)
@@ -168,7 +173,7 @@ module Railbow
           filtered = branches.reject do |b|
             branches.any? do |other|
               next false if other == b
-              _, st = Open3.capture2("git", "merge-base", "--is-ancestor", other, b)
+              _, st = Railbow::GitUtils.capture2("merge-base", "--is-ancestor", other, b)
               st.success?
             end
           end
@@ -178,7 +183,7 @@ module Railbow
             filtered.first
           else
             filtered.max_by do |b|
-              count_out, _ = Open3.capture2("git", "rev-list", "--count", "#{commit}..#{b}")
+              count_out, _ = Railbow::GitUtils.capture2("rev-list", "--count", "#{commit}..#{b}")
               count_out.strip.to_i
             end
           end
@@ -194,7 +199,7 @@ module Railbow
     end
 
     def git_uncommitted_migration_files(migrate_dir)
-      output, status = Open3.capture2("git", "status", "--porcelain", "--", migrate_dir)
+      output, status = Railbow::GitUtils.capture2("status", "--porcelain", "--", migrate_dir)
       return Set.new unless status.success?
 
       result = Set.new
@@ -221,11 +226,11 @@ module Railbow
     end
 
     def detect_merge_source_label(branch_mask)
-      merge_head, _, status = Open3.capture3("git", "rev-parse", "MERGE_HEAD")
+      merge_head, _, status = Railbow::GitUtils.capture3("rev-parse", "MERGE_HEAD")
       return nil unless status.success?
 
-      branches_out, _, bs = Open3.capture3(
-        "git", "branch", "--contains", merge_head.strip, "--format=%(refname:short)"
+      branches_out, _, bs = Railbow::GitUtils.capture3(
+        "branch", "--contains", merge_head.strip, "--format=%(refname:short)"
       )
       return nil unless bs.success?
 
@@ -240,11 +245,11 @@ module Railbow
     end
 
     def git_incoming_merge_files(migrate_dir)
-      _, _, mh_status = Open3.capture3("git", "rev-parse", "MERGE_HEAD")
+      _, _, mh_status = Railbow::GitUtils.capture3("rev-parse", "MERGE_HEAD")
       return Set.new unless mh_status.success?
 
-      output, _, status = Open3.capture3(
-        "git", "diff", "--name-only", "--diff-filter=AR", "HEAD", "MERGE_HEAD", "--", migrate_dir
+      output, _, status = Railbow::GitUtils.capture3(
+        "diff", "--name-only", "--diff-filter=AR", "HEAD", "MERGE_HEAD", "--", migrate_dir
       )
       return Set.new unless status.success?
 

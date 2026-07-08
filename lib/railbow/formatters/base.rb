@@ -35,7 +35,6 @@ module Railbow
       BRIGHT_WHITE = "\e[1;97m"
 
       def dim(str) = "#{DIM}#{str}#{RESET}"
-      def bright_white(str) = "#{BRIGHT_WHITE}#{str}#{RESET}"
       def green(str) = "#{GREEN}#{str}#{RESET}"
       def yellow(str) = "#{YELLOW}#{str}#{RESET}"
       def red(str) = "#{RED}#{str}#{RESET}"
