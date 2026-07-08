@@ -2,6 +2,14 @@
   <img src="logo.svg" alt="Railbow" width="580">
 </p>
 
+<div align="center">
+
+[![Gem Version](https://img.shields.io/gem/v/railbow)](https://rubygems.org/gems/railbow)
+[![CI](https://github.com/amberpixels/railbow/actions/workflows/ci.yml/badge.svg)](https://github.com/amberpixels/railbow/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE.txt)
+
+</div>
+
 **Make your Rails CLI output beautiful.** Railbow enhances migrations, routes, stats, notes, and more with colorful, emoji-rich, information-dense formatting.
 
 ## Features
@@ -14,6 +22,7 @@
 - **About** - polished `rails about` output
 - **Git Integration** - authors, diffs, branch origin, landing dates, uncommitted file indicators
 - **Calendar View** - month separators and week tick markers for migration timelines
+- **Ghost Recovery** - pairs with the optional [mighost](https://github.com/amberpixels/mighost) gem to recover names, authors, and branch badges for `NO FILE` migrations
 - **Smart Defaults** - auto-disables in CI, piped output, `NO_COLOR`, and LLM agents
 
 ## Installation
@@ -96,6 +105,8 @@ Out of the box you get:
 - **Affected tables** — color-coded table names extracted from migration files
 - **Time filtering** — only the last 70 days shown by default (`since: 70d`)
 - **Your migrations highlighted** — rows authored by you are visually distinct
+
+If the [mighost](https://github.com/amberpixels/mighost) gem is installed, migrations whose files were deleted (e.g. after switching branches) show up with a 👻 status and their recovered name and origin branch instead of a bare `********** NO FILE **********` row.
 
 ### `rails db:migrate:down`
 
