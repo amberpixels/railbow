@@ -22,7 +22,7 @@
 - **About** - polished `rails about` output
 - **Git Integration** - authors, diffs, branch origin, landing dates, uncommitted file indicators
 - **Calendar View** - month separators and week tick markers for migration timelines
-- **Ghost Recovery** - pairs with the optional [mighost](https://github.com/amberpixels/mighost) gem to recover names, authors, and branch badges for `NO FILE` migrations
+- **Ghost Recovery** - uses the [mighost](https://github.com/amberpixels/mighost) gem (optional) to recover names, authors, and branch badges for `NO FILE` migrations
 - **Smart Defaults** - auto-disables in CI, piped output, `NO_COLOR`, and LLM agents
 
 ## Installation
@@ -106,7 +106,7 @@ Out of the box you get:
 - **Time filtering** — only the last 70 days shown by default (`since: 70d`)
 - **Your migrations highlighted** — rows authored by you are visually distinct
 
-If the [mighost](https://github.com/amberpixels/mighost) gem is installed, migrations whose files were deleted (e.g. after switching branches) show up with a 👻 status and their recovered name and origin branch instead of a bare `********** NO FILE **********` row.
+If the [mighost](https://github.com/amberpixels/mighost) gem is installed (`gem "mighost", group: [:development, :test]`), migrations whose files were deleted (e.g. after switching branches) show up with a 👻 status and their recovered name and origin branch instead of a bare `********** NO FILE **********` row — Railbow talks to it through the stable `Mighost::API`.
 
 ### `rails db:migrate:down`
 
