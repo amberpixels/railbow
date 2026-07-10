@@ -256,17 +256,17 @@ module Railbow
 
         \e[1mOptions:\e[0m
           RBW_GIT=<options>        Git integration (comma-separated):
-                                   author     — show all authors (same as author:all)
-                                   author:all — show author + date on each annotation
-                                   author:me  — highlight your own annotations
+                                   author     - show all authors (same as author:all)
+                                   author:all - show author + date on each annotation
+                                   author:me  - highlight your own annotations
 
           RBW_SINCE=<period>       Filter annotations by blame date (default: all)
                                    Values: all, 2mo, 1w, 30d, 1y, etc.
                                    Units: d (days), w (weeks), mo/m (months), y (years)
 
           RBW_SORT=<mode>          Sort order (default: file)
-                                   file — group by file (default Rails order)
-                                   date — sort by blame date (newest first)
+                                   file - group by file (default Rails order)
+                                   date - sort by blame date (newest first)
 
           RBW_PLAIN=1              Disable Railbow formatting (plain Rails output)
 

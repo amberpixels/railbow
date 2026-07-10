@@ -97,16 +97,16 @@ becomes a rich, information-dense dashboard (with default config):
 
 Out of the box you get:
 
-- **Calendar separators** — month + ISO week headers to orient you in time
-- **Status aliases** — `↑↑` / `↓↓` instead of `up` / `down` (customizable)
-- **Created At** — timestamp parsed from the migration ID
-- **Landing dates** — `⤻ Mar 04` badge when a migration was merged to main after its creation
-- **Branch badges** — `⎇ PS-142` showing the source branch/ticket
-- **Affected tables** — color-coded table names extracted from migration files
-- **Time filtering** — only the last 70 days shown by default (`since: 70d`)
-- **Your migrations highlighted** — rows authored by you are visually distinct
+- **Calendar separators** - month + ISO week headers to orient you in time
+- **Status aliases** - `↑↑` / `↓↓` instead of `up` / `down` (customizable)
+- **Created At** - timestamp parsed from the migration ID
+- **Landing dates** - `⤻ Mar 04` badge when a migration was merged to main after its creation
+- **Branch badges** - `⎇ PS-142` showing the source branch/ticket
+- **Affected tables** - color-coded table names extracted from migration files
+- **Time filtering** - only the last 70 days shown by default (`since: 70d`)
+- **Your migrations highlighted** - rows authored by you are visually distinct
 
-If the [mighost](https://github.com/amberpixels/mighost) gem is installed (`gem "mighost", group: [:development, :test]`), migrations whose files were deleted (e.g. after switching branches) show up with a 👻 status and their recovered name and origin branch instead of a bare `********** NO FILE **********` row — Railbow talks to it through the stable `Mighost::API`.
+If the [mighost](https://github.com/amberpixels/mighost) gem is installed (`gem "mighost", group: [:development, :test]`), migrations whose files were deleted (e.g. after switching branches) show up with a 👻 status and their recovered name and origin branch instead of a bare `********** NO FILE **********` row - Railbow talks to it through the stable `Mighost::API`.
 
 ### `rails db:migrate:down`
 
@@ -126,7 +126,7 @@ Code statistics rendered as a colorful table with highlighted totals and code-to
 
 ### `rails notes`
 
-Annotations enriched with git blame data — author names, commit dates, and color-coded tags (TODO=yellow, FIXME=red, OPTIMIZE=cyan, HACK=red, NOTE=green).
+Annotations enriched with git blame data - author names, commit dates, and color-coded tags (TODO=yellow, FIXME=red, OPTIMIZE=cyan, HACK=red, NOTE=green).
 
 ## Configuration
 
@@ -207,7 +207,7 @@ RBW_SORT=date rails notes
 
 ## How It Works
 
-Railbow integrates through a Rails Railtie — it prepends formatter modules onto existing Rails classes without modifying your code:
+Railbow integrates through a Rails Railtie - it prepends formatter modules onto existing Rails classes without modifying your code:
 
 - `ActiveRecord::Migration` - migration output
 - `ActiveRecord::Tasks::DatabaseTasks` - migration status

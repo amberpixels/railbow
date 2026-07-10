@@ -26,16 +26,16 @@ module Railbow
       # sort: "file"
 
       # Git integration (comma-separated compound value):
-      #   author       — add Author column (same as author:all)
-      #   author:me    — highlight your own migrations
-      #   author:all   — show all authors
-      #   diff         — tag migrations by git origin branch
-      #   base:<branch> — base branch for diff (default: auto-detected)
-      #   mask:auto    — auto-extract ticket id from branch name
-      #   mask:<re>    — custom regex to extract branch label, e.g. mask:(PS-[^/]+)/
+      #   author       - add Author column (same as author:all)
+      #   author:me    - highlight your own migrations
+      #   author:all   - show all authors
+      #   diff         - tag migrations by git origin branch
+      #   base:<branch> - base branch for diff (default: auto-detected)
+      #   mask:auto    - auto-extract ticket id from branch name
+      #   mask:<re>    - custom regex to extract branch label, e.g. mask:(PS-[^/]+)/
       git: "author:all,diff,mask:auto"
 
-      # Author display format — preset or custom pattern (FF L, FFF LL, etc.):
+      # Author display format - preset or custom pattern (FF L, FFF LL, etc.):
       #   initials (J D), short (Jo D), first_name (John), last_name (Doe),
       #   full_name (John Doe), full_name_short (John D.)
       author_format: "short"
@@ -50,11 +50,11 @@ module Railbow
       # date: "full"
 
       # Compact mode (comma-separated):
-      #   oneline       — one line per migration
-      #   dense         — reduce padding
-      #   noheader      — hide table headers
-      #   maxw:<N>      — max column width
-      #   hide:<col>    — hide a column (repeatable)
+      #   oneline       - one line per migration
+      #   dense         - reduce padding
+      #   noheader      - hide table headers
+      #   maxw:<N>      - max column width
+      #   hide:<col>    - hide a column (repeatable)
       # compact: ""
 
       # Rename column headers and cell values in table output
