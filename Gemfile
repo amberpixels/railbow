@@ -12,7 +12,7 @@ gem "benchmark", "~> 0.5"
 gem "standard", "~> 1.54"
 
 # Optional integration: recovers ghost migrations in migrate:status
-gem "mighost", "~> 0.4"
+gem "mighost", "~> 0.5"
 
 # RAILS_VERSION lets CI test against multiple Rails releases
 gem "rails", ENV.fetch("RAILS_VERSION", "~> 8.1")
