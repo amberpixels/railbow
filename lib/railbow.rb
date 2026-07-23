@@ -9,8 +9,10 @@ module Railbow
 
   # Returns true when Railbow formatting should be disabled.
   # Checks for explicit opt-out, standard conventions, CI, and LLM agents.
+  # RBW_PLAIN always wins; RBW_FORCE beats every auto-detection below it.
   def self.plain?
     return true if Params.plain?
+    return false if Params.force?
     return true if ENV.key?("NO_COLOR")
     return true if ENV.key?("CLAUDECODE")
     return true if ENV.key?("CI")

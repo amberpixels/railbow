@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-23
+
+### Added
+
+- Ghost rows in `db:migrate:status` now surface mighost 0.5's classification:
+  a superseded ghost (re-timestamped migration) shows a calmer 🪦 status with
+  a `≡ <version>` badge pointing at its successor, and a ghost deleted with no
+  surviving branch shows `✂ deleted in:<sha>`. Branch badges are unchanged and
+  take precedence right after supersession.
+- `RBW_FORCE=1` forces Railbow formatting past every auto-detection
+  (`NO_COLOR`, CI, piped output, LLM agent detection). An explicit
+  `RBW_PLAIN=1` still wins.
+
+### Changed
+
+- Ghost data now comes from `Mighost::API.orphaned_migrations`, so
+  `db:migrate:status` honors mighost dismissals and `hide_superseded` for the
+  first time: a dismissed or hidden ghost renders as plain `NO FILE` instead
+  of 👻. Live git/worktree recovery still kicks in for versions without a
+  stored snapshot, so fresh clones keep working with zero setup.
+
+### Fixed
+
+- A ghost row without a branch no longer inherits the previous ghost row's
+  branch badge (a stale local leaked across loop iterations; unreachable
+  before mighost 0.5 made branchless ghosts the normal case).
+
 ## [0.2.0] - 2026-07-23
 
 ### Added

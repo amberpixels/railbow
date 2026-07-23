@@ -12,7 +12,112 @@ require_relative "../logo"
 # db:migrate:status and db:migrate:status:<database_name> tasks.
 module Railbow
   module MigrateStatusFormatter
+    # Ghost migration data normalized for rendering, whether it came from
+    # mighost's orphan classification or a live snapshot recovery.
+    class GhostRow
+      attr_reader :filename, :branch_name, :source, :superseded_by, :deleted_in_sha,
+        :author_name, :author_email, :content
+
+      def initialize(filename: nil, branch_name: nil, source: nil, superseded_by: nil,
+        deleted_in_sha: nil, author_name: nil, author_email: nil, content: nil)
+        @filename = filename
+        @branch_name = branch_name
+        @source = source
+        @superseded_by = superseded_by
+        @deleted_in_sha = deleted_in_sha
+        @author_name = author_name
+        @author_email = author_email
+        @content = content
+      end
+    end
+
     private
+
+    def mighost_attr(obj, name)
+      obj.respond_to?(name) ? obj.public_send(name) : nil
+    end
+
+    def mighost_snapshot_content(version)
+      Mighost::API.find_snapshot(version)&.content
+    rescue
+      nil
+    end
+
+    def load_ghost_rows(versions, with_content: false)
+      # Detect once: OrphanedMigration carries the classification (supersession,
+      # deletion commit) that a bare snapshot doesn't, and already honors
+      # dismissals and hide_superseded.
+      orphans = begin
+        Mighost::API.orphaned_migrations.to_h { |o| [o.version.to_s, o] }
+      rescue
+        return {}
+      end
+
+      rows = {}
+      versions.each do |v|
+        # Absent from detect = deliberately suppressed (dismissed, or superseded
+        # with hide_superseded on) - render as plain NO FILE, don't re-recover.
+        next unless (orphan = orphans[v])
+
+        if orphan.filename && !orphan.filename.empty?
+          rows[v] = GhostRow.new(
+            filename: orphan.filename,
+            branch_name: orphan.branch_name,
+            source: mighost_attr(orphan, :source),
+            superseded_by: mighost_attr(orphan, :superseded_by),
+            deleted_in_sha: mighost_attr(orphan, :deleted_in_sha),
+            author_name: mighost_attr(orphan, :author_name),
+            author_email: mighost_attr(orphan, :author_email),
+            content: with_content ? mighost_snapshot_content(v) : nil
+          )
+        else
+          # Detect reads stored snapshots only. A version it lists without a
+          # filename has no snapshot yet, so fall back to live git/worktree
+          # recovery - keeps fresh clones working with zero setup.
+          snapshot = begin
+            Mighost::API.find_or_recover_snapshot(v)
+          rescue
+            nil
+          end
+          next unless snapshot&.filename && !snapshot.filename.empty?
+
+          rows[v] = GhostRow.new(
+            filename: snapshot.filename,
+            branch_name: snapshot.branch_name,
+            source: mighost_attr(snapshot, :source),
+            superseded_by: api_superseded_by(v),
+            deleted_in_sha: mighost_attr(snapshot, :deleted_in_sha),
+            author_name: mighost_attr(snapshot, :author_name),
+            author_email: mighost_attr(snapshot, :author_email),
+            content: with_content ? snapshot.content : nil
+          )
+        end
+      end
+      rows
+    end
+
+    def api_superseded_by(version)
+      return nil unless Mighost::API.respond_to?(:superseded_by)
+
+      Mighost::API.superseded_by(version)
+    rescue
+      nil
+    end
+
+    # One tag slot per ghost row; most informative wins.
+    def ghost_tag(ghost)
+      if ghost.superseded_by
+        "\e[38;5;245m≡ #{ghost.superseded_by}\e[38;5;217m"
+      elsif ghost.branch_name
+        if ghost.source == "worktree"
+          "\e[38;5;222m⌥ₜ#{ghost.branch_name}\e[38;5;217m"
+        else
+          "\e[38;5;222m⌥ #{ghost.branch_name}\e[38;5;217m"
+        end
+      elsif ghost.deleted_in_sha
+        "\e[38;5;245m✂ deleted in:#{ghost.deleted_in_sha[0, 8]}\e[38;5;217m"
+      end
+    end
 
     def git_migration_authors(migrate_dir)
       output, _status = Railbow::GitUtils.capture2(
@@ -304,6 +409,9 @@ module Railbow
 
           RBW_PLAIN=1              Disable Railbow formatting (plain Rails output)
 
+          RBW_FORCE=1              Force Railbow formatting even when piped, in CI,
+                                   or called by an LLM agent (RBW_PLAIN=1 still wins)
+
           RBW_HELP=1               Show this help message
 
         \e[2mAuto-disabled when piped, in CI, or when called by an LLM agent.\e[0m
@@ -428,19 +536,12 @@ module Railbow
         uncommitted_files.each { |f| branch_origins[f] ||= current_branch }
       end
 
-      # Load mighost snapshots for "NO FILE" migrations (if mighost gem is available)
+      # Load mighost ghost data for "NO FILE" migrations (if mighost gem is available)
       mighost_snapshots = {}
       mighost_available = defined?(Mighost::API) && Mighost.enabled?
       if mighost_available
         no_file_versions = db_list.select { |_, _, n| n.include?("NO FILE") }.map { |_, v, _| v.to_s }
-        no_file_versions.each do |v|
-          snapshot = begin
-            Mighost::API.find_or_recover_snapshot(v)
-          rescue
-            nil
-          end
-          mighost_snapshots[v] = snapshot if snapshot&.filename && !snapshot.filename.empty?
-        end
+        mighost_snapshots = load_ghost_rows(no_file_versions, with_content: tables_enabled) if no_file_versions.any?
       end
 
       # Build columns
@@ -501,29 +602,25 @@ module Railbow
         ghost_snapshot = name.include?("NO FILE") ? mighost_snapshots[version.to_s] : nil
         if name.include?("NO FILE") && ghost_snapshot
           ghost_rows << idx
-          # Mighost recovered this ghost migration — show 👻 status + name + branch badge
-          colored_status = "👻"
+          # Mighost recovered this ghost migration — show ghost status + name + badge.
+          # A superseded ghost lives on under another version: stale bookkeeping,
+          # not a lost migration, so it gets a calmer glyph.
+          colored_status = ghost_snapshot.superseded_by ? "🪦" : "👻"
           ghost_name = ghost_snapshot.filename
             .sub(/\A\d+_/, "")    # strip version prefix
             .sub(/\.rb\z/, "")    # strip extension
             .tr("_", " ")
             .gsub(/\b\w/, &:upcase) # titleize
-          if ghost_snapshot.branch_name
-            branch_tag = if ghost_snapshot.respond_to?(:source) && ghost_snapshot.source == "worktree"
-              "\e[38;5;222m⌥ₜ#{ghost_snapshot.branch_name}\e[38;5;217m"
-            else
-              "\e[38;5;222m⌥ #{ghost_snapshot.branch_name}\e[38;5;217m"
-            end
-          end
-          if branch_tag && name_col_width
-            tag_width = formatter.display_width(formatter.strip_ansi(branch_tag))
+          ghost_badge = ghost_tag(ghost_snapshot)
+          if ghost_badge && name_col_width
+            tag_width = formatter.display_width(formatter.strip_ansi(ghost_badge))
             available = name_col_width - tag_width - 2
             ghost_name = formatter.truncate_str(ghost_name, available)
             name_width = formatter.display_width(ghost_name)
             padding = name_col_width - name_width - tag_width
-            display_name = "#{ghost_name}#{" " * [padding, 2].max}#{branch_tag}"
-          elsif branch_tag
-            display_name = "#{ghost_name}  #{branch_tag}"
+            display_name = "#{ghost_name}#{" " * [padding, 2].max}#{ghost_badge}"
+          elsif ghost_badge
+            display_name = "#{ghost_name}  #{ghost_badge}"
           else
             display_name = ghost_name
           end

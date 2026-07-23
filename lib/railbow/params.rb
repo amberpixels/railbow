@@ -71,6 +71,10 @@ module Railbow
       truthy?(ENV["RBW_PLAIN"])
     end
 
+    def force?
+      truthy?(ENV["RBW_FORCE"])
+    end
+
     def since
       (ENV["RBW_SINCE"] || Config.load["since"] || "all").strip.downcase
     end

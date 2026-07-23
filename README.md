@@ -106,7 +106,7 @@ Out of the box you get:
 - **Time filtering** - only the last 70 days shown by default (`since: 70d`)
 - **Your migrations highlighted** - rows authored by you are visually distinct
 
-If the [mighost](https://github.com/amberpixels/mighost) gem is installed (`gem "mighost", group: [:development, :test]`), migrations whose files were deleted (e.g. after switching branches) show up with a 👻 status and their recovered name and origin branch instead of a bare `********** NO FILE **********` row - Railbow talks to it through the stable `Mighost::API`.
+If the [mighost](https://github.com/amberpixels/mighost) gem is installed (`gem "mighost", group: [:development, :test]`), migrations whose files were deleted (e.g. after switching branches) show up with a 👻 status and their recovered name instead of a bare `********** NO FILE **********` row - Railbow talks to it through the stable `Mighost::API`. Each ghost row carries the most informative badge mighost can provide: `≡ <version>` when the migration was re-timestamped and lives on under another version (shown with a calmer 🪦 status), `⌥ <branch>` when a branch still holds the file, or `✂ deleted in:<sha>` pointing at the commit that removed it. Ghosts dismissed via `mighost:dismiss` (or hidden by `hide_superseded`) render as plain `NO FILE`.
 
 ### `rails db:migrate:down`
 
@@ -176,6 +176,7 @@ Every option can also be set via `RBW_*` environment variables, which override c
 | Variable | Example | Description |
 |---|---|---|
 | `RBW_PLAIN` | `1` | Disable all formatting |
+| `RBW_FORCE` | `1` | Force formatting even when piped, in CI, or run by an LLM agent (`RBW_PLAIN=1` still wins) |
 | `RBW_SINCE` | `2mo`, `70d`, `1y`, `all` | Filter migrations by time period |
 | `RBW_DATE` | `full`, `rel`, `short`, `custom(%b %d)` | Date display format |
 | `RBW_GIT` | `author:me,diff,mask:auto` | Git integration options |
@@ -220,6 +221,10 @@ Formatting auto-disables when:
 - Running in CI (`CI` env var)
 - Output is piped or redirected (non-TTY)
 - Running inside an LLM agent (`CLAUDECODE` env var)
+
+`RBW_FORCE=1` overrides all of the auto-detection above (useful for capturing
+formatted output to a file, or letting an agent inspect the real rendering).
+An explicit `RBW_PLAIN=1` always wins over `RBW_FORCE`.
 
 ## Requirements
 
