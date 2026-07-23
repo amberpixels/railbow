@@ -8,6 +8,7 @@ module Railbow
     SINGLE_TABLE_METHODS = %w[
       create_table drop_table change_table
       add_column remove_column rename_column change_column
+      change_column_default change_column_null
       add_index remove_index
       add_reference remove_reference
       add_belongs_to remove_belongs_to
@@ -19,7 +20,9 @@ module Railbow
       add_foreign_key remove_foreign_key
     ].freeze
 
-    SINGLE_TABLE_PATTERN = /\b(?:#{SINGLE_TABLE_METHODS.join("|")})\s+[:"](\w+)/
+    # Dual-table methods are included here too: their first argument is always a
+    # table, even when the second is passed as `to_table:` instead of positionally.
+    SINGLE_TABLE_PATTERN = /\b(?:#{(SINGLE_TABLE_METHODS + DUAL_TABLE_METHODS).join("|")})\s+[:"](\w+)/
     DUAL_TABLE_PATTERN = /\b(?:#{DUAL_TABLE_METHODS.join("|")})\s+[:"](\w+)["\s,]+[:"](\w+)/
 
     # SQL keywords followed by a table name
@@ -32,6 +35,17 @@ module Railbow
       /\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["']?(\w+)["']?/i,
       /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i
     ].freeze
+
+    # Helper/DSL calls that name their target table via a keyword argument, e.g.
+    # `convert_to_monthly_partitions(table: :apples)` or
+    # `remove_foreign_key :accounts, to_table: :owners`. Catches project-level
+    # migration helpers regardless of the method name. Bare `from:`/`to:` are
+    # deliberately not matched — `change_column_default :users, :status,
+    # from: nil, to: "active"` would yield phantom tables.
+    KEYWORD_TABLE_PATTERN = /\b(?:table|to_table|from_table):\s*[:"']?(\w+)/
+
+    # Ruby `#` comments up to end of line, but not `#{}` interpolation.
+    COMMENT_PATTERN = /#(?!\{).*/
 
     # AR class-level query/mutation methods that strongly signal a constant is a model.
     # Kept narrow on purpose — methods like `find`, `all`, `first`, `count`, `create`,
@@ -60,6 +74,11 @@ module Railbow
     def self.extract_tables_from_content(content)
       return [] if content.nil? || content.empty?
 
+      # Comments would otherwise produce phantom tables — an explanatory
+      # "# ALTER TABLE foo ..." or a commented-out create_table reads exactly
+      # like the real thing to the patterns below.
+      content = content.gsub(COMMENT_PATTERN, "")
+
       tables = []
 
       content.scan(SINGLE_TABLE_PATTERN) { |match| tables << match[0] }
@@ -67,6 +86,7 @@ module Railbow
       SQL_TABLE_PATTERNS.each do |pattern|
         content.scan(pattern) { |match| tables << match[0] }
       end
+      content.scan(KEYWORD_TABLE_PATTERN) { |match| tables << match[0] }
       tables.uniq!
 
       # Model-based detection is heuristic (a constant that happens to respond

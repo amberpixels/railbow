@@ -172,6 +172,79 @@ RSpec.describe Railbow::MigrationParser do
     end
   end
 
+  describe "keyword-argument table detection" do
+    it "extracts table from a helper call with table: keyword and symbol value" do
+      content = "convert_to_monthly_partitions(table: :apples, indexes: INDEXES)"
+      expect(described_class.extract_tables_from_content(content)).to eq(["apples"])
+    end
+
+    it "extracts table from table: keyword with string value" do
+      content = 'convert_to_monthly_partitions(table: "apples")'
+      expect(described_class.extract_tables_from_content(content)).to eq(["apples"])
+    end
+
+    it "extracts both tables from remove_foreign_key with to_table: keyword" do
+      content = "remove_foreign_key :accounts, to_table: :owners"
+      expect(described_class.extract_tables_from_content(content)).to contain_exactly("accounts", "owners")
+    end
+
+    it "does not extract from:/to: values as tables" do
+      content = 'change_column_default :users, :status, from: nil, to: "active"'
+      expect(described_class.extract_tables_from_content(content)).to eq(["users"])
+    end
+
+    it "counts keyword tables toward the model-detection guard" do
+      content = <<~RUBY
+        partition_helper(table: :orders)
+        partition_helper(table: :users)
+        Setting.find_each { |s| s.update_column(:x, 1) }
+      RUBY
+      expect(described_class.extract_tables_from_content(content)).to contain_exactly("orders", "users")
+    end
+
+    it "extracts table from a realistic partition-conversion migration" do
+      content = <<~RUBY
+        class PartitionApplesByMonth < ActiveRecord::Migration[8.1]
+          include PartitionConversion
+
+          # Rewrites the table into a partitioned one (ALTER TABLE is not enough:
+          # postgres cannot convert a plain table in place).
+          INDEXES = [
+            [:banana_id, "index_apples_on_banana_id"],
+            [:created_at, "index_apples_on_created_at"]
+          ].freeze
+
+          def up
+            convert_to_monthly_partitions(table: :apples, indexes: INDEXES)
+          end
+        end
+      RUBY
+      expect(described_class.extract_tables_from_content(content)).to eq(["apples"])
+    end
+  end
+
+  describe "comment stripping" do
+    it "ignores SQL keywords inside comments" do
+      content = <<~RUBY
+        # This used to run ALTER TABLE ghosts, kept for reference.
+        def up; end
+      RUBY
+      expect(described_class.extract_tables_from_content(content)).to eq([])
+    end
+
+    it "ignores commented-out DSL calls" do
+      content = "# create_table :ghosts do |t|; end"
+      expect(described_class.extract_tables_from_content(content)).to eq([])
+    end
+
+    it "keeps content after string interpolation on the same line" do
+      content = <<~'RUBY'
+        execute "COMMENT ON TABLE #{tbl} IS 'x'; UPDATE settings SET a = 1"
+      RUBY
+      expect(described_class.extract_tables_from_content(content)).to eq(["settings"])
+    end
+  end
+
   describe "model-based table detection" do
     it "infers table name from ActiveRecord model with find_each" do
       content = <<~RUBY
