@@ -22,6 +22,11 @@ module Railbow
       # Time window for migrations to display (e.g. 30d, 2mo, 1y, all)
       since: "70d"
 
+      # Never show fewer than this many migrations, however old they are.
+      # The window above is a soft limit: a database with five migrations shows
+      # all five rather than reporting an empty period. 0 disables the floor.
+      since_min: 10
+
       # Sort order: file (by filename/version) or date (by timestamp)
       # sort: "file"
 
@@ -54,6 +59,17 @@ module Railbow
 
       # Date format: full, rel, short, or custom(%b %d, %Y)
       # date: "full"
+
+      # Multi-database runs (comma-separated). Leave empty ("") to expand every
+      # database into its own section, in database.yml order; a database with
+      # nothing in the time window collapses to a one-line summary either way.
+      #   focus       - expand only the first database, summarizing the rest.
+      #                 A database with migrations pending is always expanded
+      #   only:<name> - render only this database (repeatable)
+      #   skip:<name> - drop this database (repeatable)
+      #   full        - draw every database in full, overriding focus
+      #   inline      - one merged table ordered by version, with a Db column
+      db: "focus"
 
       # Compact mode (comma-separated):
       #   oneline       - one line per migration

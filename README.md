@@ -22,6 +22,7 @@
 - **About** - polished `rails about` output
 - **Git Integration** - authors, diffs, branch origin, landing dates, uncommitted file indicators
 - **Calendar View** - month separators plus week ticks or full week rows, with optional per-section counts
+- **Multiple Databases** - read one table by default, the rest summarized in a line each (and expanded when they have migrations pending); sharded databases merged with a status per shard
 - **Ghost Recovery** - uses the [mighost](https://github.com/amberpixels/mighost) gem (optional) to recover names, authors, and branch badges for `NO FILE` migrations
 - **Smart Defaults** - auto-disables in CI, piped output, `NO_COLOR`, and LLM agents
 
@@ -103,7 +104,7 @@ Out of the box you get:
 - **Landing dates** - `⤻ Mar 04` badge when a migration was merged to main after its creation
 - **Branch badges** - `⎇ PS-142` showing the source branch/ticket
 - **Affected tables** - color-coded table names extracted from migration files
-- **Time filtering** - only the last 70 days shown by default (`since: 70d`)
+- **Time filtering** - only the last 70 days shown by default (`since: 70d`), as a soft limit: never fewer than 10 migrations, however old (`since_min: 10`)
 - **Your migrations highlighted** - rows authored by you are visually distinct
 - **Pending migrations greyed out** - a `down` row keeps its status glyph but loses its colors
 
@@ -145,6 +146,79 @@ calendar: ""            # month separators only
 ```
 
 Dropping `calendar` from `view` instead removes the month separators too.
+
+#### Multiple databases
+
+Rails runs `db:migrate:status` once per database, so a multi-database app used
+to get one blind table per database: widths that did not line up, the help
+printed once per database, and every git lookup repeated. Railbow now renders
+the whole run together.
+
+By default you read one table: the first database in `database.yml` is rendered
+in full and every other one is summarized in a line each (`db: focus`).
+
+```
+📊 2 databases · primary, log
+
+──── primary · myapp_development ──── 12 of 240 ────────────────────────
+ ↑↑  │ 20260721130000 │ 2026-07-21 13:00:00 │ Partition visit reminders    ● visit_reminders
+ ↓↓  │ 20260727170000 │ 2026-07-27 17:00:00 │ Add microchip ids to animals ● animals
+
+⋯ log · 5 migrations, all applied · latest Jul 22 2026
+```
+
+**A database with migrations pending is always expanded**, however focused the
+run is. The summary exists to hide what needs no action, and pending work is
+the opposite of that.
+
+Setting `db` to an empty value expands every database that has recent activity,
+each as its own section with column widths shared so the tables line up:
+
+```yaml
+db: ""            # or RBW_DB= on the command line
+```
+
+```
+──── primary · myapp_development ──── 12 of 240 ────────────────────────
+ ↑↑  │ 20260721130000 │ 2026-07-21 13:00:00 │ Partition visit reminders    ● visit_reminders
+
+──── log · log_development ─────────────────────────────────────────────
+ ↑↑  │ 20260722120000 │ 2026-07-22 12:00:00 │ Drop archived visit logs     ● archived_visit_logs
+```
+
+A section header counts what it is showing: `12 of 240` means 12 fell inside
+the time window. When the window found too few and the `since_min` floor topped
+the section back up, it reads `last 10 of 50` instead, because the rows are
+then the newest ten rather than a window's worth.
+
+Even then, a database with nothing in the time window collapses to one line
+rather than an empty table, which is what keeps the `cache`, `queue` and
+`cable` databases of a stock Rails 8 app from drowning out your own:
+
+```
+⋯ cache · 5 migrations, all applied · latest Feb 12 2024
+⋯ queue · 12 migrations, 3 pending outside the 70d window - RBW_SINCE=all
+```
+
+Databases that share a `migrations_paths` (horizontal sharding) run the same
+files, so they merge into one table carrying a status per database. Drift
+between shards is then visible at a glance, and `·` marks a version a shard has
+never seen:
+
+```
+──── primary + primary_shard_one · db/migrate ──────────────────────────
+ ↑↑ ↑↑ │ 20260601151200 │ 2026-06-01 15:12:00 │ Add owner id to pets
+ ↑↑ ↓↓ │ 20260726143000 │ 2026-07-26 14:30:00 │ Add policy number to bills
+```
+
+`RBW_DB` controls the rest: `only:<name>` and `skip:<name>` (both repeatable)
+pick databases, `full` draws every section in full and overrides `focus`, and
+`inline` merges everything into a single table ordered by version with a `Db`
+column, so the calendar spans the whole application rather than restarting per
+database. `focus` never applies to an inline run - a merged table exists to
+hold every database at once.
+
+A single-database app sees none of this: its output is unchanged.
 
 If the [mighost](https://github.com/amberpixels/mighost) gem is installed (`gem "mighost", group: [:development, :test]`), migrations whose files were deleted (e.g. after switching branches) show up with a 👻 status and their recovered name instead of a bare `********** NO FILE **********` row - Railbow talks to it through the stable `Mighost::API`. Each ghost row carries the most informative badge mighost can provide: `≡ <version>` when the migration was re-timestamped and lives on under another version (shown with a calmer 🪦 status), `⌥ <branch>` when a branch still holds the file, or `✂ deleted in:<sha>` pointing at the commit that removed it. Ghosts dismissed via `mighost:dismiss` (or hidden by `hide_superseded`) render as plain `NO FILE`.
 
@@ -193,10 +267,12 @@ rake railbow:init
 
 ```yaml
 since: 70d
+since_min: 10
 date: rel
 git: "author:me,diff,mask:auto"
 view: "calendar,tables"
 calendar: wticks
+db: focus
 
 compact: "maxw:120"
 
@@ -218,10 +294,12 @@ Every option can also be set via `RBW_*` environment variables, which override c
 | `RBW_PLAIN` | `1` | Disable all formatting |
 | `RBW_FORCE` | `1` | Force formatting even when piped, in CI, or run by an LLM agent (`RBW_PLAIN=1` still wins) |
 | `RBW_SINCE` | `2mo`, `70d`, `1y`, `all` | Filter migrations by time period |
+| `RBW_SINCE_MIN` | `10`, `0` | Never show fewer than this many migrations, however old (default 10; `0` disables) |
 | `RBW_DATE` | `full`, `rel`, `short`, `custom(%b %d)` | Date display format |
 | `RBW_GIT` | `author:me,diff,mask:auto` | Git integration options |
 | `RBW_VIEW` | `calendar,tables` | Enable calendar view and table detection |
 | `RBW_CALENDAR` | `wticks`, `wdividers,counts`, `` (empty) | Week markers: tick marks, full week separator rows, per-section counts. Empty means month separators only |
+| `RBW_DB` | `focus` (default), `` (empty), `only:primary`, `skip:cache`, `full`, `inline` | Multi-database runs: focus one database, expand them all, pick some, or merge them into one table |
 | `RBW_COMPACT` | `oneline,dense,noheader,maxw:80` | Compact display options |
 | `RBW_VERB` | `GET,POST` | Filter routes by HTTP method |
 | `RBW_SORT` | `file`, `date` | Sort order for notes |

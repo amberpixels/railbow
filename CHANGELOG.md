@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Multi-database support for `db:migrate:status`. Rails runs the task once per
+  database; railbow now wraps that loop and renders the databases together, as
+  one section each in `database.yml` order with column widths shared so the
+  tables line up. The section header names the database by its `database.yml`
+  name, which is what you configure and filter by, rather than the database
+  name Rails reports.
+- A database with nothing in the time window and nothing pending collapses to a
+  one-line summary instead of an empty table, so the `cache`, `queue` and
+  `cable` databases of a stock Rails 8 app stop drowning out your own. Anything
+  it hides (pending migrations, ghosts) is counted in the line, along with the
+  flag that reveals them.
+- Databases sharing a `migrations_paths` (horizontal sharding) merge into a
+  single table carrying a status glyph per database, making drift between
+  shards visible at a glance. A dim `·` marks a version one shard has never
+  seen.
+- `RBW_DB` (config key `db`) selects and shapes a multi-database run:
+  `only:<name>` and `skip:<name>` (both repeatable) pick databases, `full`
+  draws the quiet ones in full, and `inline` merges everything into one table
+  ordered by version with a `Db` column, so the calendar spans the whole
+  application instead of restarting per database. Filtered-out databases are
+  named in a footer rather than silently dropped.
+
+- `RBW_SINCE_MIN` (config key `since_min`, default 10) makes the time window a
+  soft limit: whatever `since` leaves, the floor tops it back up to this many
+  migrations. A database with five migrations now shows all five rather than
+  hiding the two that happen to be old and reporting an empty period. The
+  hidden-count line says `showing the last 10` when the floor overrode the
+  window, and a multi-database section header reads `last 10 of 50` rather than
+  `10 of 50`, so a table holding rows older than the window it names still
+  reads honestly in both views. `RBW_SINCE_MIN=0` restores the old hard cutoff.
+- `RBW_DB=focus`, **the default**, expands only the first database and
+  summarizes the rest in a line each, so a multi-database app is one table to
+  read rather than several. A database holding pending migrations is expanded
+  anyway: the summary exists to hide what needs no action, and pending work is
+  the opposite of that. An empty `RBW_DB` (or `db: ""`) expands every database
+  that has recent activity, `full` expands everything including quiet ones, and
+  `focus` never applies to an `inline` run, which exists to hold every database
+  at once.
+
+### Changed
+
+- Git lookups are now shared across a run: authors, landed dates and branch
+  origins are resolved once per migrations directory instead of once per
+  database. `RBW_HELP=1` prints the help once for the whole run rather than
+  once per database.
+- `db:migrate:status` internals moved out of the rake file into
+  `Railbow::Status` (`Section`, `Printer`, `GitData`, `Ghosts`, `Help`). No
+  output changed: a single-database app renders byte for byte what it did
+  before, which a golden fixture now enforces.
+
 ## [0.4.0] - 2026-07-28
 
 ### Added

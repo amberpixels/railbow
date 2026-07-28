@@ -80,6 +80,17 @@ module Railbow
       (ENV["RBW_SINCE"] || Config.load["since"] || "all").strip.downcase
     end
 
+    # Floor on how many migrations survive the SINCE window. The window is a
+    # soft limit: when it leaves fewer rows than this, the oldest ones are
+    # pulled back in until the count is met. 0 disables the floor.
+    #
+    # Deliberately a knob of its own rather than a token inside RBW_SINCE, so
+    # an ad-hoc `RBW_SINCE=2mo` keeps the floor instead of silently dropping it.
+    def since_min
+      value = ENV["RBW_SINCE_MIN"] || Config.load["since_min"] || 0
+      [value.to_i, 0].max
+    end
+
     def sort
       (ENV["RBW_SORT"] || Config.load["sort"] || "file").strip.downcase
     end
@@ -213,6 +224,49 @@ module Railbow
         warn "  Warning: RBW_VIEW=tables:nowrap is deprecated. Use RBW_COMPACT=oneline instead."
       end
       !val.nil?
+    end
+
+    # --- Compound: RBW_DB ---
+
+    def db
+      parse_compound(ENV["RBW_DB"] || Config.load["db"])
+    end
+
+    # Render every database in one time-ordered table instead of a section
+    # each. Only meaningful when the databases keep separate migration sets.
+    def db_inline?
+      db["inline"] == true
+    end
+
+    # Draw the full table for every database, including the quiet ones that
+    # would otherwise collapse to a summary line.
+    def db_full?
+      db["full"] == true
+    end
+
+    # Expand only the first database, summarizing the rest in a line each - but
+    # never at the cost of hiding work: a database holding pending migrations
+    # is always drawn in full, since that is the one thing you may need to act
+    # on. RBW_DB=full overrides it, and it does not apply to inline runs.
+    def db_focus?
+      db["focus"] == true
+    end
+
+    def db_only
+      Array(db["only"]).select { |v| v.is_a?(String) }
+    end
+
+    def db_skip
+      Array(db["skip"]).select { |v| v.is_a?(String) }
+    end
+
+    # Whether a database, by its database.yml name, is part of this run.
+    def db_included?(name)
+      name = name.to_s
+      only = db_only
+      return only.include?(name) if only.any?
+
+      !db_skip.include?(name)
     end
 
     # --- Compound: RBW_CALENDAR ---

@@ -16,35 +16,40 @@ module Railbow
 
       attr_reader :columns, :theme
 
-      def initialize(columns:, theme:, compact: {}, aliases: {})
+      # min_widths raises the resolved width of each column to at least the
+      # given value, which is how several tables rendered in one run line their
+      # columns up with each other. An explicit compact maxw still wins.
+      def initialize(columns:, theme:, compact: {}, aliases: {}, min_widths: nil)
         @compact = compact
         @aliases = aliases
+        @min_widths = min_widths
         @reverse_col_aliases = aliases[:columns]&.invert || {}
         @columns = apply_hidden_columns(columns)
         @theme = theme
       end
 
+      # The widths this table would resolve to on its own. Callers rendering
+      # several tables together take the per-column maximum and feed it back as
+      # min_widths.
+      def column_widths(rows)
+        return [] if columns.empty?
+
+        resolve_widths(prepare_rows(rows))
+      end
+
+      # Width of everything left of the last column. The last column flexes to
+      # the terminal, so this is where furniture drawn around the table (a
+      # section rule, say) can stop without running past it.
+      def fixed_width(widths)
+        return 0 if columns.empty? || widths.nil? || widths.empty?
+
+        compute_prefix_width(widths, columns.size - 1)
+      end
+
       def render(rows, separators: {}, highlight_rows: Set.new, ghost_rows: Set.new, dim_rows: Set.new, tick_rows: Set.new, tick_col: nil)
         return "" if columns.empty?
 
-        # Remap rows if columns were hidden
-        rows = remap_rows(rows) if @hidden_indices&.any?
-
-        # Apply value aliases
-        rows = apply_value_aliases(rows) if @aliases[:values]&.any?
-
-        # Pre-truncate non-last columns that have truncate + max_width
-        rows = rows.map { |row|
-          row.each_with_index.map { |cell, i|
-            col = columns[i]
-            if col&.truncate && col.max_width && i < columns.size - 1
-              truncate_str(cell.to_s, col.max_width)
-            else
-              cell
-            end
-          }
-        }
-
+        rows = prepare_rows(rows)
         resolved = resolve_widths(rows)
 
         # In oneline mode, truncate non-sticky non-last columns at resolved width
@@ -77,6 +82,25 @@ module Railbow
 
       private
 
+      # Everything that changes a cell's content, and therefore its width,
+      # before widths are resolved: hidden columns, value aliases, and the
+      # pre-truncation of non-last columns that cap themselves.
+      def prepare_rows(rows)
+        rows = remap_rows(rows) if @hidden_indices&.any?
+        rows = apply_value_aliases(rows) if @aliases[:values]&.any?
+
+        rows.map { |row|
+          row.each_with_index.map { |cell, i|
+            col = columns[i]
+            if col&.truncate && col.max_width && i < columns.size - 1
+              truncate_str(cell.to_s, col.max_width)
+            else
+              cell
+            end
+          }
+        }
+      end
+
       def resolve_widths(rows)
         all_rows = rows
         last = columns.size - 1
@@ -95,6 +119,9 @@ module Railbow
             w = [w, col.min_width].max if col.min_width
             w = [w, col.max_width].min if col.max_width
           end
+          # Alignment across tables raises the width; an explicit maxw caps it
+          # afterwards, so the user's cap stays authoritative.
+          w = [w, @min_widths[i].to_i].max if @min_widths && i != last && w > 0
           w = [w, global_maxw].min if global_maxw && i != last && w > 0
           w
         end
@@ -429,6 +456,8 @@ module Railbow
         # Build column index → value alias map
         col_map = {}
         columns.each_with_index do |col, i|
+          next unless col.aliased
+
           label = col.label
           col_map[i] = value_aliases[label] if value_aliases[label]
           # Also look up by original name if column was renamed by alias

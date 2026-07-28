@@ -14,10 +14,12 @@ module Railbow
         }
       },
       "since" => "70d",
+      "since_min" => 10,
       "git" => "author:all,diff,mask:auto",
       "author_format" => "short",
       "view" => "calendar,tables",
-      "calendar" => "wticks"
+      "calendar" => "wticks",
+      "db" => "focus"
     }.freeze
 
     @root = nil

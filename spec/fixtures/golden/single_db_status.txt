@@ -1,0 +1,12 @@
+
+📊 Database: [36mrailbow_test[0m
+
+ [48;5;99m[1m[97mLive[0m   [48;5;99m[1m[97mMigration ID  [0m   [48;5;99m[1m[97mCreated At         [0m   [48;5;99m[1m[97mMigration Name                                              [0m   [48;5;99m[1m[97mWho [0m   [48;5;99m[1m[97mTables[0m 
+ [97m[32m[1m↑↑[0m  [0m[0m │ [97m20260202145343[0m[0m │ [97m2026-02-02 14:53:43[0m[0m │ [97mAddWeightFieldToAnimals                                     [0m[0m │ [97mTe D[0m[0m │ [97m[38;5;39m● animals[0m[0m[0m 
+ [32m[1m↑↑[0m  [0m │ 20260203134528[0m │ 2026-02-03 13:45:28[0m │ CreateVaccinationRecords                                    [0m │ Ot D[0m │ [38;5;170m● vaccination_records[0m[0m 
+ [32m[1m↑↑[0m  [0m │ 20260210183902[0m ┬ 2026-02-10 18:39:02[0m ┬ CreatePetTags                                       [2m↪ Mar 04[0m[0m │ Ot D[0m │ [38;5;196m● pet_tags[0m[0m 
+      │ [38;5;97mMar 2026   W10[0m ┼                     ┼                                                              │      │  
+ [97m[32m[1m↑↑[0m  [0m[0m │ [97m20260303120000[0m[0m │ [97m2026-03-03 12:00:00[0m[0m │ [97mAddBreedRestrictionsToAdoptionPolicies              [2m↪ Mar 13[0m[0m[0m │ [97mTe D[0m[0m │ [97m[38;5;208m● adoption_policies[0m[0m[0m 
+ [97m[32m[1m↑↑[0m  [0m[0m │ [97m20260313132325[0m[0m ┬ [97m2026-03-13 13:23:25[0m[0m ┬ [97mCreateVeterinaryAppointments                                [0m[0m │ [97mTe D[0m[0m │ [97m[38;5;109m● veterinary_appointments[0m [38;5;39m● animals[0m[0m[0m 
+ [97m[32m[1m↑↑[0m  [0m[0m │ [97m20260315110000[0m[0m │ [97m2026-03-15 11:00:00[0m[0m │ [97m[31mNO FILE[0m                                                     [0m[0m │ [97m    [0m[0m │ [97m[0m[0m 
+ [33m[1m↓↓[0m  [0m │ [38;5;242m20260318090000[0m[0m ┬ [38;5;242m2026-03-18 09:00:00[0m[0m ┬ [38;5;242mAddNotesToVaccinationRecords                                [0m[0m │ [38;5;242mOt D[0m[0m │ [38;5;242m● vaccination_records[0m[0m 

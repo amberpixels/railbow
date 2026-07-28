@@ -4,11 +4,16 @@ require "spec_helper"
 require "active_record"
 require "mighost"
 require "stringio"
+require "support/status_fixture"
 
 load File.expand_path("../../../lib/railbow/tasks/migrate_status.rake", __dir__)
 
 RSpec.describe Railbow::MigrateStatusFormatter do
+  include StatusFixture
+
   subject(:helper) { helper_class.new }
+
+  before { isolate_config }
 
   let(:helper_class) do
     Class.new do
@@ -18,18 +23,15 @@ RSpec.describe Railbow::MigrateStatusFormatter do
     end
   end
 
-  def ghost_row(**attrs)
-    Railbow::MigrateStatusFormatter::GhostRow.new(**attrs)
-  end
-
   def orphan(version:, **attrs)
     Mighost::OrphanDetector::OrphanedMigration.new(version: version, **attrs)
   end
 
-  def stub_connection_pool(db_list, migrations: [])
+  def stub_connection_pool(db_list, migrations: [], name: "primary", migrations_paths: ["db/migrate"])
     schema_migration = double(table_exists?: true)
-    db_config = double(database: "testdb")
-    migration_context = double(migrations_status: db_list, migrations: migrations)
+    db_config = double(database: "testdb", name: name)
+    migration_context = double(migrations_status: db_list, migrations: migrations,
+      migrations_paths: migrations_paths)
     helper.migration_connection_pool =
       double(schema_migration: schema_migration, db_config: db_config, migration_context: migration_context)
   end
@@ -42,116 +44,6 @@ RSpec.describe Railbow::MigrateStatusFormatter do
     captured.string
   ensure
     $stdout = original
-  end
-
-  describe "#apply_branch_mask" do
-    it "extracts the first capture group of the mask" do
-      expect(helper.send(:apply_branch_mask, "PS-123/add-index", "(PS-[^/]+)/")).to eq("PS-123")
-    end
-
-    it "returns the branch unchanged when the mask is empty" do
-      expect(helper.send(:apply_branch_mask, "feature/foo", "")).to eq("feature/foo")
-    end
-
-    it "returns the branch unchanged when the mask does not match" do
-      expect(helper.send(:apply_branch_mask, "feature/foo", "(PS-[^/]+)/")).to eq("feature/foo")
-    end
-
-    it "returns the branch unchanged when the mask is an invalid regex" do
-      expect(helper.send(:apply_branch_mask, "feature/foo", "([")).to eq("feature/foo")
-    end
-  end
-
-  describe "#ghost_tag" do
-    it "prefers the superseded badge over branch and deletion" do
-      tag = helper.send(:ghost_tag, ghost_row(
-        superseded_by: "20260105130000",
-        branch_name: "origin/apples",
-        deleted_in_sha: "aabbccddeeff"
-      ))
-      expect(tag).to include("≡ 20260105130000")
-      expect(tag).not_to include("⌥")
-    end
-
-    it "shows the branch badge when there is no superseder" do
-      tag = helper.send(:ghost_tag, ghost_row(branch_name: "origin/apples", deleted_in_sha: "aabbccddeeff"))
-      expect(tag).to include("⌥ origin/apples")
-    end
-
-    it "marks worktree branches with the worktree glyph" do
-      tag = helper.send(:ghost_tag, ghost_row(branch_name: "apples", source: "worktree"))
-      expect(tag).to include("⌥ₜapples")
-    end
-
-    it "falls back to the deletion commit with a short sha" do
-      tag = helper.send(:ghost_tag, ghost_row(deleted_in_sha: "aabbccddeeff"))
-      expect(tag).to include("✂ deleted in:aabbccdd")
-    end
-
-    it "returns nil when there is nothing to say" do
-      expect(helper.send(:ghost_tag, ghost_row)).to be_nil
-    end
-  end
-
-  describe "#load_ghost_rows" do
-    before { allow(Mighost::API).to receive(:superseded_by).and_return(nil) }
-
-    it "builds rows from detect results, carrying the classification" do
-      allow(Mighost::API).to receive(:orphaned_migrations).and_return([
-        orphan(version: "20260101110000", filename: "20260101110000_add_apples.rb",
-          branch_name: nil, superseded_by: "20260105130000", deleted_in_sha: "aabbccddeeff")
-      ])
-
-      rows = helper.send(:load_ghost_rows, ["20260101110000"])
-      expect(rows.keys).to eq(["20260101110000"])
-      expect(rows["20260101110000"].superseded_by).to eq("20260105130000")
-      expect(rows["20260101110000"].deleted_in_sha).to eq("aabbccddeeff")
-    end
-
-    it "recovers live when detect lists a version without a snapshot filename" do
-      allow(Mighost::API).to receive(:orphaned_migrations).and_return([
-        orphan(version: "20260101110000")
-      ])
-      snapshot = Mighost::Snapshot.new(
-        version: "20260101110000",
-        filename: "20260101110000_add_bananas.rb",
-        branch_name: "origin/bananas"
-      )
-      allow(Mighost::API).to receive(:find_or_recover_snapshot).with("20260101110000").and_return(snapshot)
-      allow(Mighost::API).to receive(:superseded_by).with("20260101110000").and_return("20260109090000")
-
-      rows = helper.send(:load_ghost_rows, ["20260101110000"])
-      expect(rows["20260101110000"].filename).to eq("20260101110000_add_bananas.rb")
-      expect(rows["20260101110000"].branch_name).to eq("origin/bananas")
-      expect(rows["20260101110000"].superseded_by).to eq("20260109090000")
-    end
-
-    it "does not recover versions absent from detect (dismissed or hidden)" do
-      allow(Mighost::API).to receive(:orphaned_migrations).and_return([])
-      expect(Mighost::API).not_to receive(:find_or_recover_snapshot)
-
-      rows = helper.send(:load_ghost_rows, ["20260101110000"])
-      expect(rows).to be_empty
-    end
-
-    it "returns no rows when detect itself fails" do
-      allow(Mighost::API).to receive(:orphaned_migrations).and_raise(StandardError)
-      expect(helper.send(:load_ghost_rows, ["20260101110000"])).to eq({})
-    end
-
-    it "loads snapshot content only when requested" do
-      allow(Mighost::API).to receive(:orphaned_migrations).and_return([
-        orphan(version: "20260101110000", filename: "20260101110000_add_apples.rb")
-      ])
-      snapshot = Mighost::Snapshot.new(version: "20260101110000",
-        filename: "20260101110000_add_apples.rb", content: "create_table :apples")
-      allow(Mighost::API).to receive(:find_snapshot).with("20260101110000").and_return(snapshot)
-
-      rows = helper.send(:load_ghost_rows, ["20260101110000"], with_content: true)
-      expect(rows["20260101110000"].content).to eq("create_table :apples")
-
-      expect(helper.send(:load_ghost_rows, ["20260101110000"])["20260101110000"].content).to be_nil
-    end
   end
 
   describe "#migrate_status ghost rendering" do
@@ -232,6 +124,88 @@ RSpec.describe Railbow::MigrateStatusFormatter do
 
       expect(pending_row).to include(Railbow::Table::Renderer::DIMMED_FG)
       expect(applied).not_to include(Railbow::Table::Renderer::DIMMED_FG)
+    end
+  end
+
+  describe "#migrate_status empty states" do
+    before do
+      allow(Railbow).to receive(:plain?).and_return(false)
+      allow(Mighost).to receive(:enabled?).and_return(false) if defined?(Mighost)
+    end
+
+    it "reports a database with no migrations at all" do
+      allow(Railbow::Params).to receive(:since).and_return("all")
+      stub_connection_pool([])
+
+      expect(render_status).to include("No migrations found")
+    end
+
+    it "reports how many migrations the since filter hid" do
+      allow(Railbow::Params).to receive(:since).and_return("1d")
+      allow(Railbow::Params).to receive(:since_min).and_return(0)
+      stub_connection_pool([["up", "20200101000001", "Add Apples"]])
+
+      output = render_status
+      expect(output).to include("1 older migrations hidden - SINCE=1d")
+      expect(output).to include("No migrations in the selected period")
+    end
+  end
+
+  # The time window is a soft limit: it never hides so much that the table
+  # stops being useful. A database with a handful of migrations shows all of
+  # them however old they are, rather than reporting an empty period.
+  describe "#migrate_status minimum row floor" do
+    def old_migrations(count)
+      (1..count).map { |i| ["up", format("202001010000%02d", i), "Add Apples #{i}"] }
+    end
+
+    before do
+      allow(Railbow).to receive(:plain?).and_return(false)
+      allow(Railbow::Params).to receive(:since).and_return("70d")
+      allow(Mighost).to receive(:enabled?).and_return(false) if defined?(Mighost)
+    end
+
+    it "shows every migration when there are fewer than the floor" do
+      allow(Railbow::Params).to receive(:since_min).and_return(10)
+      stub_connection_pool(old_migrations(5))
+
+      output = render_status
+      5.times { |i| expect(output).to include("Add Apples #{i + 1}") }
+      expect(output).not_to include("hidden")
+      expect(output).not_to include("No migrations in the selected period")
+    end
+
+    it "stops at the floor and reports the rest as hidden" do
+      allow(Railbow::Params).to receive(:since_min).and_return(10)
+      stub_connection_pool(old_migrations(15))
+
+      output = render_status
+      expect(output).to include("5 older migrations hidden - SINCE=70d, showing the last 10")
+      expect(output).to include("Add Apples 15")
+      expect(output).not_to include("Add Apples 5\e")
+    end
+
+    it "keeps the newest migrations, not the oldest" do
+      allow(Railbow::Params).to receive(:since_min).and_return(3)
+      stub_connection_pool(old_migrations(5))
+
+      output = render_status
+      expect(output).to include("Add Apples 3").and include("Add Apples 5")
+      expect(output).not_to include("Add Apples 1 ")
+    end
+
+    it "says nothing about a floor that never came into play" do
+      allow(Railbow::Params).to receive(:since_min).and_return(10)
+      stub_connection_pool([["up", Time.now.strftime("%Y%m%d%H%M%S"), "Add Apples"]])
+
+      expect(render_status).not_to include("showing the last")
+    end
+
+    it "is disabled by RBW_SINCE_MIN=0" do
+      allow(Railbow::Params).to receive(:since_min).and_return(0)
+      stub_connection_pool(old_migrations(5))
+
+      expect(render_status).to include("No migrations in the selected period")
     end
   end
 end
