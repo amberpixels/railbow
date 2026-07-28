@@ -8,7 +8,8 @@ module Railbow
         :format_header_cell, :format_separator
 
       def initialize(col_separator:, header_col_separator:, cell_padding:,
-        format_header_cell:, format_separator: nil, tick_separator: nil, tick_cross_separator: nil)
+        format_header_cell:, format_separator: nil,
+        tick_separator: nil, tick_cross_separator: nil)
         @col_separator = col_separator
         @tick_separator = tick_separator || col_separator
         @tick_cross_separator = tick_cross_separator || @tick_separator
@@ -23,7 +24,7 @@ module Railbow
       RESET = "\e[0m"
       BOLD = "\e[1m"
       WHITE = "\e[97m"
-      PURPLE = "\e[38;5;141m"
+      PURPLE = "\e[38;5;97m" # separator rows: present, but never louder than the data
       BG_PURPLE = "\e[48;5;99m"
       DIM = "\e[2m"
 

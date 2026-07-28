@@ -3,7 +3,9 @@
 require "date"
 require_relative "../formatters/base"
 require_relative "../table"
+require_relative "../calendar"
 require_relative "../config"
+require_relative "../params"
 require_relative "fixtures"
 
 module Railbow
@@ -20,7 +22,8 @@ module Railbow
         puts "\n#{formatter.emoji(:status)} Database: #{formatter.cyan("db/development.sqlite3")}"
         puts
 
-        # Use default config: author:me, diff, calendar, tables, wticks, full date
+        # Fixed for the showcase: author:me, diff, tables, full date. The calendar
+        # options below come from the real params, so RBW_CALENDAR still applies.
         date_format = "full"
         tables_enabled = true
         diff_enabled = true
@@ -28,7 +31,7 @@ module Railbow
         git_email = Fixtures::DEMO_USER_EMAIL
         git_name = Fixtures::DEMO_USER_NAME
 
-        # Latest migration date — for "fresh" landed badge detection
+        # Latest migration date - for "fresh" landed badge detection
         latest_version = migrations.last[:version]
         latest_mig_date = parse_version_date(latest_version)
 
@@ -108,40 +111,16 @@ module Railbow
           [colored_status, m[:version], created_at, display_name, table_tags]
         end
 
-        # Calendar separators
-        separators = {}
-        versions = migrations.map { |m| m[:version] }
-        month_keys = versions.map { |v| v[0..5] }
-        calendar_label_fmt = "%b %Y   W%V"
-
-        if month_keys.uniq.size > 1
-          month_keys.each_with_index do |mk, i|
-            next if i == 0
-            if mk != month_keys[i - 1]
-              v = versions[i]
-              date = Date.new(v[0..3].to_i, v[4..5].to_i, v[6..7].to_i)
-              separators[i] = date.strftime(calendar_label_fmt)
-            end
-          end
-        end
-
-        # Week ticks
-        tick_rows = Set.new
-        prev_week = nil
-        versions.each_with_index do |v, i|
-          y = v[0..3].to_i
-          m = v[4..5].to_i
-          d = v[6..7].to_i
-          next if y == 0 || m == 0 || d == 0
-
-          week = Date.new(y, m, d).cweek
-
-          if i > 0 && prev_week && week != prev_week
-            tick_rows << i
-          end
-
-          prev_week = week
-        end
+        # Calendar furniture. Driven by the real params, so RBW_CALENDAR can be
+        # tried out here without a Rails project.
+        calendar = Railbow::Calendar.build(
+          migrations.map { |m| m[:version] },
+          weeks: Railbow::Params.calendar_wdividers?,
+          ticks: Railbow::Params.calendar_wticks?,
+          counts: Railbow::Params.calendar_counts?,
+          month_label: Railbow::Params.calendar_label,
+          week_label: Railbow::Params.calendar_week_label
+        )
 
         aliases = Railbow::Config.table_aliases
         renderer = Railbow::Table::Renderer.new(
@@ -150,8 +129,10 @@ module Railbow
           compact: {oneline: false, dense: false, noheader: false, maxw: nil, hidden_columns: []},
           aliases: aliases
         )
-        puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows,
-          dim_rows: down_rows, tick_rows: tick_rows, tick_col: 2)
+        puts renderer.render(rows,
+          separators: calendar.separators,
+          highlight_rows: highlight_rows, dim_rows: down_rows,
+          tick_rows: calendar.tick_rows, tick_col: 2)
       end
 
       private

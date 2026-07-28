@@ -43,7 +43,13 @@ module Railbow
       # View mode (comma-separated): calendar, tables
       view: "calendar,tables"
 
-      # Calendar options: wticks (show week tick separators)
+      # Calendar options (comma-separated), all require view: calendar.
+      # Leave empty ("") for month separators only, with no week markers.
+      #   wticks       - week tick marks on the date column
+      #   wdividers    - a separator row per ISO week
+      #   counts       - append "· N migrations" to separator rows (per section)
+      #   label:<fmt>  - strftime for month separators (default: %b %Y   W%V)
+      #   wlabel:<fmt> - strftime for week separators (default: same as label)
       calendar: "wticks"
 
       # Date format: full, rel, short, or custom(%b %d, %Y)

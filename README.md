@@ -21,7 +21,7 @@
 - **Notes** - `rails notes` with git blame, author colors, date filtering, and sorting
 - **About** - polished `rails about` output
 - **Git Integration** - authors, diffs, branch origin, landing dates, uncommitted file indicators
-- **Calendar View** - month separators and week tick markers for migration timelines
+- **Calendar View** - month separators plus week ticks or full week rows, with optional per-section counts
 - **Ghost Recovery** - uses the [mighost](https://github.com/amberpixels/mighost) gem (optional) to recover names, authors, and branch badges for `NO FILE` migrations
 - **Smart Defaults** - auto-disables in CI, piped output, `NO_COLOR`, and LLM agents
 
@@ -105,6 +105,46 @@ Out of the box you get:
 - **Affected tables** - color-coded table names extracted from migration files
 - **Time filtering** - only the last 70 days shown by default (`since: 70d`)
 - **Your migrations highlighted** - rows authored by you are visually distinct
+- **Pending migrations greyed out** - a `down` row keeps its status glyph but loses its colors
+
+#### Weekly view
+
+By default each new ISO week is marked with a tick on the date column
+(`calendar: wticks`). For a fuller weekly breakdown, `wdividers` gives every
+week its own separator row, and `counts` appends how many migrations sit under
+each separator, week or month:
+
+```bash
+RBW_CALENDAR=wdividers,counts rake db:migrate:status
+```
+
+```
+         Feb 2026   W06 · 2 migrations
+ ↑↑    │ 20260202145343 │ 2026-02-02 14:53:43 │ Add weight field to animals          ● animals
+ ↑↑    │ 20260203134528 │ 2026-02-03 13:45:28 │ Create vaccination records           ● vaccination_records
+         Feb 2026   W07 · 1 migration
+ ↑↑    │ 20260210183902 │ 2026-02-10 18:39:02 │ Create pet tags                      ● pet_tags
+         Mar 2026   W10 · 1 migration
+ ↑↑    │ 20260303120000 │ 2026-03-03 12:00:00 │ Add breed restrictions to…           ● adoption_policies
+         Mar 2026   W11 · 1 migration
+ ↑↑    │ 20260313132325 │ 2026-03-13 13:23:25 │ Create veterinary appointm…  ⎇ PS-142  ● veterinary_appointments
+```
+
+Every separator carries the month, so the week number always sits at the same
+offset instead of shifting left on rows that open no new month, and every
+separator is drawn in the same muted purple. Both labels are `strftime`
+patterns: `label:` for months, `wlabel:` for weeks (defaulting to the same
+pattern).
+
+`RBW_CALENDAR` is the list of *week* markers, so an empty value leaves you with
+month separators and nothing else:
+
+```yaml
+view: "calendar,tables"
+calendar: ""            # month separators only
+```
+
+Dropping `calendar` from `view` instead removes the month separators too.
 
 If the [mighost](https://github.com/amberpixels/mighost) gem is installed (`gem "mighost", group: [:development, :test]`), migrations whose files were deleted (e.g. after switching branches) show up with a 👻 status and their recovered name instead of a bare `********** NO FILE **********` row - Railbow talks to it through the stable `Mighost::API`. Each ghost row carries the most informative badge mighost can provide: `≡ <version>` when the migration was re-timestamped and lives on under another version (shown with a calmer 🪦 status), `⌥ <branch>` when a branch still holds the file, or `✂ deleted in:<sha>` pointing at the commit that removed it. Ghosts dismissed via `mighost:dismiss` (or hidden by `hide_superseded`) render as plain `NO FILE`.
 
@@ -181,7 +221,7 @@ Every option can also be set via `RBW_*` environment variables, which override c
 | `RBW_DATE` | `full`, `rel`, `short`, `custom(%b %d)` | Date display format |
 | `RBW_GIT` | `author:me,diff,mask:auto` | Git integration options |
 | `RBW_VIEW` | `calendar,tables` | Enable calendar view and table detection |
-| `RBW_CALENDAR` | `wticks` | Show week tick markers |
+| `RBW_CALENDAR` | `wticks`, `wdividers,counts`, `` (empty) | Week markers: tick marks, full week separator rows, per-section counts. Empty means month separators only |
 | `RBW_COMPACT` | `oneline,dense,noheader,maxw:80` | Compact display options |
 | `RBW_VERB` | `GET,POST` | Filter routes by HTTP method |
 | `RBW_SORT` | `file`, `date` | Sort order for notes |

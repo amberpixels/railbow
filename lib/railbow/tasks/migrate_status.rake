@@ -6,6 +6,7 @@ require_relative "../formatters/base"
 require_relative "../migration_parser"
 require_relative "../config"
 require_relative "../table"
+require_relative "../calendar"
 require_relative "../logo"
 
 # Override DatabaseTasks.migrate_status which is called by both
@@ -270,7 +271,7 @@ module Railbow
         # 1. Filter out child branches: if branch A is an ancestor of branch B,
         #    the commit was introduced in A, not B.
         # 2. Among remaining, prefer the branch with the MOST commits after the
-        #    adding commit — it has been active longer since the commit was made,
+        #    adding commit - it has been active longer since the commit was made,
         #    indicating it is the original branch (not a newer fork).
         best = if branches.size == 1
           branches.first
@@ -376,36 +377,44 @@ module Railbow
                                    Units: d (days), w (weeks), mo/m (months), y (years)
 
           RBW_DATE=<mode>          Date column format (default: full):
-                                   full       — 2026-01-30 12:08:54 (column: Created At)
-                                   rel        — ~3d ago
-                                   short      — Jan 30 (column: Date)
-                                   custom(…)  — user strftime, e.g. custom(%b %d, %Y)
+                                   full       - 2026-01-30 12:08:54 (column: Created At)
+                                   rel        - ~3d ago
+                                   short      - Jan 30 (column: Date)
+                                   custom(…)  - user strftime, e.g. custom(%b %d, %Y)
 
           RBW_VIEW=<options>       Display options (comma-separated):
-                                   calendar   — show month/year separator lines + week ticks
-                                   tables     — parse migration files, show Tables column
+                                   calendar   - show month/year separator lines + week ticks
+                                   tables     - parse migration files, show Tables column
 
           RBW_COMPACT=<options>    Compact display (comma-separated):
-                                   oneline    — truncate instead of wrapping
-                                   dense      — remove cell padding
-                                   noheader   — hide table header row
-                                   maxw:<n>   — cap column widths at n chars
-                                   hide:<col> — hide a column by name (repeatable)
+                                   oneline    - truncate instead of wrapping
+                                   dense      - remove cell padding
+                                   noheader   - hide table header row
+                                   maxw:<n>   - cap column widths at n chars
+                                   hide:<col> - hide a column by name (repeatable)
 
-          RBW_CALENDAR=<options>  Calendar sub-options (requires RBW_VIEW=calendar):
-                                   wticks     — show week tick marks on date column
-                                   label:<fmt> — strftime format for month separator
-                                                (default: %b %Y   W%V)
+          RBW_CALENDAR=<options>   Calendar sub-options (requires RBW_VIEW=calendar):
+                                   (empty)      - month separators only, no week
+                                                  markers at all
+                                   wticks       - week tick marks on the date column
+                                   wdividers    - a separator row per ISO week
+                                   counts       - append "· N migrations" to every
+                                                  separator row (that section)
+                                   label:<fmt>  - strftime for month separators
+                                                  (default: %b %Y   W%V)
+                                   wlabel:<fmt> - strftime for week separators
+                                                  (default: same as label, so the
+                                                  week number never shifts)
 
           RBW_GIT=<options>        Git integration (comma-separated):
-                                   author     — add an Author column (same as author:all)
-                                   author:all — add an Author column
-                                   author:me  — highlight your own migrations
-                                   diff       — tag migrations by git origin
-                                   base:<branch> — base branch for diff (default: auto-detected)
-                                   mask:<re>  — regex to extract branch label
+                                   author     - add an Author column (same as author:all)
+                                   author:all - add an Author column
+                                   author:me  - highlight your own migrations
+                                   diff       - tag migrations by git origin
+                                   base:<branch> - base branch for diff (default: auto-detected)
+                                   mask:<re>  - regex to extract branch label
                                                 e.g. mask:(PS-[^/]+)/
-                                   mask:auto  — auto-extract ticket id from branch name
+                                   mask:auto  - auto-extract ticket id from branch name
 
           RBW_PLAIN=1              Disable Railbow formatting (plain Rails output)
 
@@ -419,6 +428,7 @@ module Railbow
         \e[1mExamples:\e[0m
           rake db:migrate:status
           RBW_SINCE=2mo RBW_VIEW=calendar rake db:migrate:status
+          RBW_CALENDAR=wdividers,counts rake db:migrate:status
           RBW_VIEW=tables RBW_GIT=author rake db:migrate:status
           RBW_GIT=author:me RBW_SINCE=3mo rake db:migrate:status
           RBW_DATE=rel rake db:migrate:status
@@ -481,7 +491,7 @@ module Railbow
 
         skipped = total_count - db_list.size
         if skipped > 0
-          puts formatter.dim("  (#{skipped} older migrations hidden — SINCE=#{since_value})")
+          puts formatter.dim("  (#{skipped} older migrations hidden - SINCE=#{since_value})")
           puts
         end
       end
@@ -545,7 +555,7 @@ module Railbow
       end
 
       # Build columns
-      # Latest migration ID date — used to determine "fresh" landed badges
+      # Latest migration ID date - used to determine "fresh" landed badges
       latest_version = db_list.last&.dig(1).to_s
       latest_mig_date = begin
         Date.new(latest_version[0..3].to_i, latest_version[4..5].to_i, latest_version[6..7].to_i)
@@ -606,7 +616,7 @@ module Railbow
         ghost_snapshot = name.include?("NO FILE") ? mighost_snapshots[version.to_s] : nil
         if name.include?("NO FILE") && ghost_snapshot
           ghost_rows << idx
-          # Mighost recovered this ghost migration — show ghost status + name + badge.
+          # Mighost recovered this ghost migration - show ghost status + name + badge.
           # A superseded ghost lives on under another version: stale bookkeeping,
           # not a lost migration, so it gets a calmer glyph.
           colored_status = ghost_snapshot.superseded_by ? "🪦" : "👻"
@@ -705,7 +715,7 @@ module Railbow
             filepath = version_to_file[version.to_s]
             basename = filepath ? File.basename(filepath) : nil
 
-            # Uncommitted migrations have no git author — treat them as mine.
+            # Uncommitted migrations have no git author - treat them as mine.
             # Match by email first; fall back to author name to handle cases where
             # the commit email differs from git config (e.g. GitHub noreply emails
             # after squash-merge, or mailmap rewrites).
@@ -740,44 +750,18 @@ module Railbow
         row
       end
 
-      # Calendar separators
-      separators = {}
-      if calendar_enabled
-        versions = db_list.map { |_, v, _| v.to_s }
-        month_keys = versions.map { |v| v[0..5] }
-        calendar_label_fmt = Railbow::Params.calendar_label
-
-        if month_keys.uniq.size > 1
-          month_keys.each_with_index do |mk, i|
-            next if i == 0
-            if mk != month_keys[i - 1]
-              v = versions[i]
-              date = Date.new(v[0..3].to_i, v[4..5].to_i, v[6..7].to_i)
-              separators[i] = date.strftime(calendar_label_fmt)
-            end
-          end
-        end
-      end
-
-      # Week tick separators: mark first row of each new ISO week
-      tick_rows = Set.new
-      if ticks_enabled
-        versions = db_list.map { |_, v, _| v.to_s }
-        prev_week = nil
-        versions.each_with_index do |v, i|
-          y = v[0..3].to_i
-          m = v[4..5].to_i
-          d = v[6..7].to_i
-          next if y == 0 || m == 0 || d == 0
-
-          week = Date.new(y, m, d).cweek
-
-          if i > 0 && prev_week && week != prev_week
-            tick_rows << i
-          end
-
-          prev_week = week
-        end
+      # Calendar furniture: month separators, week separators, week ticks
+      calendar = if calendar_enabled
+        Railbow::Calendar.build(
+          db_list.map { |_, v, _| v.to_s },
+          weeks: Railbow::Params.calendar_wdividers?,
+          ticks: ticks_enabled,
+          counts: Railbow::Params.calendar_counts?,
+          month_label: Railbow::Params.calendar_label,
+          week_label: Railbow::Params.calendar_week_label
+        )
+      else
+        Railbow::Calendar.none
       end
 
       renderer = Railbow::Table::Renderer.new(
@@ -787,8 +771,10 @@ module Railbow
         aliases: Railbow::Config.table_aliases
       )
       tick_col = 2 # Date column index
-      puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows, ghost_rows: ghost_rows,
-        dim_rows: down_rows, tick_rows: tick_rows, tick_col: tick_col)
+      puts renderer.render(rows,
+        separators: calendar.separators,
+        highlight_rows: highlight_rows, ghost_rows: ghost_rows, dim_rows: down_rows,
+        tick_rows: calendar.tick_rows, tick_col: tick_col)
     end
   end
 end

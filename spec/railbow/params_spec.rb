@@ -326,8 +326,10 @@ RSpec.describe Railbow::Params do
   end
 
   describe "calendar compound accessors" do
-    it "defaults calendar_wticks? to true" do
+    it "defaults to wticks, leaving the fuller week options opt-in" do
       expect(described_class.calendar_wticks?).to be true
+      expect(described_class.calendar_wdividers?).to be false
+      expect(described_class.calendar_counts?).to be false
     end
 
     it "enables wticks with RBW_CALENDAR=wticks" do
@@ -340,6 +342,53 @@ RSpec.describe Railbow::Params do
       ENV["RBW_VIEW"] = "tables"
       ENV["RBW_CALENDAR"] = "wticks"
       expect(described_class.calendar_wticks?).to be false
+    end
+
+    it "drops every week marker when RBW_CALENDAR is empty, keeping month separators" do
+      ENV["RBW_VIEW"] = "calendar"
+      ENV["RBW_CALENDAR"] = ""
+
+      expect(described_class.view_calendar?).to be true
+      expect(described_class.calendar_wticks?).to be false
+      expect(described_class.calendar_wdividers?).to be false
+      expect(described_class.calendar_counts?).to be false
+    end
+
+    it "turns wdividers and counts off when RBW_CALENDAR names neither" do
+      ENV["RBW_VIEW"] = "calendar"
+      ENV["RBW_CALENDAR"] = "wticks"
+
+      expect(described_class.calendar_wdividers?).to be false
+      expect(described_class.calendar_counts?).to be false
+    end
+
+    it "enables week dividers and counts with RBW_CALENDAR=wdividers,counts" do
+      ENV["RBW_VIEW"] = "calendar"
+      ENV["RBW_CALENDAR"] = "wdividers,counts"
+
+      expect(described_class.calendar_wdividers?).to be true
+      expect(described_class.calendar_counts?).to be true
+      expect(described_class.calendar_wticks?).to be false
+    end
+
+    it "requires calendar mode for wdividers and counts" do
+      ENV["RBW_VIEW"] = "tables"
+      ENV["RBW_CALENDAR"] = "wdividers,counts"
+
+      expect(described_class.calendar_wdividers?).to be false
+      expect(described_class.calendar_counts?).to be false
+    end
+
+    it "falls back to the default labels, week rows included" do
+      expect(described_class.calendar_label).to eq("%b %Y   W%V")
+      expect(described_class.calendar_week_label).to eq("%b %Y   W%V")
+    end
+
+    it "takes custom labels from RBW_CALENDAR" do
+      ENV["RBW_CALENDAR"] = "label:%Y-%m,wlabel:week %V"
+
+      expect(described_class.calendar_label).to eq("%Y-%m")
+      expect(described_class.calendar_week_label).to eq("week %V")
     end
   end
 

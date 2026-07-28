@@ -169,6 +169,24 @@ RSpec.describe Railbow::Table::Renderer do
       expect(strip_ansi(lines[2])).to include("Mar 2023")
     end
 
+    it "lets a separator label spill into the empty space instead of shifting the row" do
+      columns = [
+        Railbow::Table::Column.new(label: "Status", max_width: 6),
+        Railbow::Table::Column.new(label: "Migration ID"),
+        Railbow::Table::Column.new(label: "When"),
+        Railbow::Table::Column.new(label: "Name")
+      ]
+      renderer = described_class.new(columns: columns, theme: Railbow::Table::Themes::WALLS)
+      rows = [["up", "20260601090000", "2026-06-01", "AddPosts"], ["up", "20260701090000", "2026-07-01", "AddTags"]]
+
+      short = renderer.render(rows, separators: {1 => "Jul 2026"}).split("\n")[2]
+      long = renderer.render(rows, separators: {1 => "Jul 2026   W27 · 12"}).split("\n")[2]
+
+      # The label overruns the Migration ID column, but the row keeps its width
+      expect(strip_ansi(long)).to include("Jul 2026   W27 · 12")
+      expect(strip_ansi(long).length).to eq(strip_ansi(short).length)
+    end
+
     it "does not insert separator for PLAIN theme (no format_separator)" do
       columns = [
         Railbow::Table::Column.new(label: "Name"),

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "date"
+require_relative "calendar"
 require_relative "config"
 require_relative "name_formatter"
 require_relative "name_collision_resolver"
@@ -226,8 +227,26 @@ module Railbow
       calendar["wticks"] == true
     end
 
+    # A separator row per ISO week, the fuller counterpart to wticks.
+    def calendar_wdividers?
+      return false unless view_calendar?
+
+      calendar["wdividers"] == true
+    end
+
+    # Append "· N migrations" to every separator row: how many it introduces.
+    def calendar_counts?
+      return false unless view_calendar?
+
+      calendar["counts"] == true
+    end
+
     def calendar_label
-      calendar["label"] || "%b %Y   W%V"
+      calendar["label"] || Calendar::DEFAULT_MONTH_LABEL
+    end
+
+    def calendar_week_label
+      calendar["wlabel"] || Calendar::DEFAULT_WEEK_LABEL
     end
   end
 end

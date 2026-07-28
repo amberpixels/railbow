@@ -65,9 +65,7 @@ module Railbow
         rows.each_with_index do |row, i|
           tc = (tick_rows.include?(i) && tick_col) ? tick_col : nil
           if separators.key?(i) && theme.format_separator
-            sep_row = Array.new(columns.size, "")
-            sep_row[1] = theme.format_separator.call(separators[i]) if columns.size > 1
-            lines << render_row(sep_row, resolved, tick_col: tc, tick_cross: true)
+            lines << render_separator_row(separators[i], resolved, tick_col: tc)
             tc = nil # tick already shown on separator row
           end
           formatted = render_row(row, resolved, tick_col: tc, highlight: highlight_rows.include?(i),
@@ -114,11 +112,38 @@ module Railbow
         }.join(theme.header_col_separator)
       end
 
-      def render_row(row, widths, tick_col: nil, tick_cross: false, highlight: false, ghost: false, dim: false)
+      # A separator row is furniture, not data: the walls are drawn empty and the
+      # label is laid over them starting at the second column. Writing over the
+      # blanks rather than filling a cell means a label wider than its column
+      # spills into the empty space to its right instead of shifting the row.
+      def render_separator_row(label, widths, tick_col: nil)
+        pad = effective_padding
+        cells = widths.map { |w| "#{pad}#{" " * w}#{pad}" }
+
+        skeleton = cells.first.to_s.dup
+        (1...cells.size).each do |i|
+          skeleton << "#{separator_at(i - 1, tick_col, cross: true)}#{cells[i]}"
+        end
+        return skeleton if cells.size < 2 || label.nil? || label.empty?
+
+        offset = display_width(cells[0]) + display_width(separator_at(0, tick_col, cross: true)) + display_width(pad)
+        tail = skeleton[(offset + display_width(label))..] || ""
+        "#{skeleton[0, offset]}#{theme.format_separator.call(label)}#{tail}"
+      end
+
+      # The separator character between column index and index + 1. Columns
+      # flanking the tick column get the tick variant so the week line reads
+      # as one continuous rule.
+      def separator_at(index, tick_col, cross: false)
+        flanks_tick = tick_col && (index == tick_col - 1 || index == tick_col)
+        return theme.col_separator unless flanks_tick
+
+        cross ? theme.tick_cross_separator : theme.tick_separator
+      end
+
+      def render_row(row, widths, tick_col: nil, highlight: false, ghost: false, dim: false)
         last = columns.size - 1
         pad = effective_padding
-        default_sep = theme.col_separator
-        tick_sep = tick_cross ? theme.tick_cross_separator : theme.tick_separator
 
         prefix_parts = row[0...last].each_with_index.map { |cell, i|
           s = cell.to_s
@@ -129,21 +154,19 @@ module Railbow
           "#{pad}#{content}#{RESET}#{pad}"
         }
 
-        # Join prefix parts with per-position separators
-        # Loop index i joins column i-1 and column i (separator_index = i-1)
-        # For tick_col, flanking separator indices are tick_col-1 and tick_col
-        prefix = prefix_parts.first.to_s
+        # Join prefix parts with per-position separators.
+        # Loop index i joins column i-1 and column i (separator index = i-1).
+        # dup: appending to prefix_parts.first itself would corrupt the parts
+        # that render_last_cell measures for the wrapped-line indent.
+        prefix = prefix_parts.first.to_s.dup
         (1...prefix_parts.size).each do |i|
-          sep_idx = i - 1
-          sep = (tick_col && (sep_idx == tick_col - 1 || sep_idx == tick_col)) ? tick_sep : default_sep
-          prefix << "#{sep}#{prefix_parts[i]}"
+          prefix << "#{separator_at(i - 1, tick_col)}#{prefix_parts[i]}"
         end
 
         last_cell_raw = row[last].to_s
 
         # Separator before the last column has index (last - 1)
-        last_sep_idx = last - 1
-        last_sep = (tick_col && (last_sep_idx == tick_col - 1 || last_sep_idx == tick_col)) ? tick_sep : default_sep
+        last_sep = separator_at(last - 1, tick_col)
         render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: last_sep, highlight: highlight, ghost: ghost, dim: dim)
       end
 
@@ -321,7 +344,7 @@ module Railbow
             current << token
             current_width += token_width
           elsif current_width.zero?
-            # Single token wider than max — try to break on underscores
+            # Single token wider than max - try to break on underscores
             broken = break_long_token(token, max_width)
             lines.concat(broken[0...-1])
             current = +broken.last
