@@ -5,15 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-07-28
+
+### Added
+
+- `RBW_CALENDAR=wdividers` gives every ISO week its own separator row, the
+  fuller counterpart to `wticks`. A week that opens a new month is left to the
+  month row rather than being announced twice. The default stays `wticks`, so
+  existing output is unchanged until you opt in.
+- `RBW_CALENDAR=counts` appends `· N migrations` to every separator row: how
+  many migrations that section holds, counted up to the next separator.
+- `RBW_CALENDAR=wlabel:<fmt>` sets the strftime pattern for week rows,
+  alongside the existing `label:` for month rows. It defaults to the month
+  pattern, so the week number sits at the same offset on every separator row
+  rather than shifting left when no new month is announced.
+- `railbow demo status` now honors `RBW_CALENDAR`, so the calendar modes can be
+  tried without a Rails project.
+- An empty `RBW_CALENDAR` (month separators, no week markers) is now documented
+  in the help output, the `railbow init` template, and the README. It always
+  worked; nobody could have guessed it.
 
 ### Changed
 
+- Calendar separator rows are drawn in a muted purple (256-color 97) instead of
+  the brighter 141, so they frame the migrations without competing with them.
 - Migrations that are not applied (`down`) now render as a greyed-out row in
   `db:migrate:status`, instead of signalling their state through the status
   column alone. The row keeps its layout and its status glyph keeps its color;
   everything else drops its own colors, so pending migrations read as inactive
   next to the applied ones.
+
+### Fixed
+
+- Rows whose last column wrapped were indented with too wide a blank prefix:
+  building the row mutated the very cell that the wrapped-line indent is
+  measured from. Reachable from `routes`, `about`, and `stats`.
+- A separator label wider than its column no longer pushes the rest of the row
+  sideways. Separator rows are drawn as empty walls with the label laid over
+  them, so a long label spills into the blank space to its right.
+- `RBW_HELP` output for `db:migrate:status` uses plain hyphens instead of
+  em-dashes, matching the rest of the user-facing text.
 
 ## [0.3.0] - 2026-07-23
 
