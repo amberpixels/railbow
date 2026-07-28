@@ -26,6 +26,24 @@ RSpec.describe Railbow::MigrateStatusFormatter do
     Mighost::OrphanDetector::OrphanedMigration.new(version: version, **attrs)
   end
 
+  def stub_connection_pool(db_list, migrations: [])
+    schema_migration = double(table_exists?: true)
+    db_config = double(database: "testdb")
+    migration_context = double(migrations_status: db_list, migrations: migrations)
+    helper.migration_connection_pool =
+      double(schema_migration: schema_migration, db_config: db_config, migration_context: migration_context)
+  end
+
+  def render_status
+    captured = StringIO.new
+    original = $stdout
+    $stdout = captured
+    helper.migrate_status
+    captured.string
+  ensure
+    $stdout = original
+  end
+
   describe "#apply_branch_mask" do
     it "extracts the first capture group of the mask" do
       expect(helper.send(:apply_branch_mask, "PS-123/add-index", "(PS-[^/]+)/")).to eq("PS-123")
@@ -149,24 +167,10 @@ RSpec.describe Railbow::MigrateStatusFormatter do
       allow(Railbow).to receive(:plain?).and_return(false)
       allow(Railbow::Params).to receive(:since).and_return("all")
 
-      schema_migration = double(table_exists?: true)
-      db_config = double(database: "testdb")
-      migration_context = double(migrations_status: db_list, migrations: [])
-      helper.migration_connection_pool =
-        double(schema_migration: schema_migration, db_config: db_config, migration_context: migration_context)
+      stub_connection_pool(db_list)
 
       allow(Mighost).to receive(:enabled?).and_return(true)
       allow(Mighost::API).to receive(:superseded_by).and_return(nil)
-    end
-
-    def render_status
-      captured = StringIO.new
-      original = $stdout
-      $stdout = captured
-      helper.migrate_status
-      captured.string
-    ensure
-      $stdout = original
     end
 
     it "does not leak the previous ghost's branch badge onto a branchless ghost" do
@@ -206,6 +210,28 @@ RSpec.describe Railbow::MigrateStatusFormatter do
       output = render_status
       expect(output).to include("NO FILE")
       expect(output).not_to include("👻")
+    end
+  end
+
+  describe "#migrate_status down rendering" do
+    before do
+      allow(Railbow).to receive(:plain?).and_return(false)
+      allow(Railbow::Params).to receive(:since).and_return("all")
+      allow(Mighost).to receive(:enabled?).and_return(false) if defined?(Mighost)
+
+      stub_connection_pool([
+        ["up", "20260101000001", "Add Apples"],
+        ["down", "20260101000002", "Add Bananas"]
+      ])
+    end
+
+    it "greys out the whole row of a migration that is not applied" do
+      lines = render_status.lines
+      applied = lines.find { |l| l.include?("Add Apples") }
+      pending_row = lines.find { |l| l.include?("Add Bananas") }
+
+      expect(pending_row).to include(Railbow::Table::Renderer::DIMMED_FG)
+      expect(applied).not_to include(Railbow::Table::Renderer::DIMMED_FG)
     end
   end
 end

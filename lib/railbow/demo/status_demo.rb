@@ -43,7 +43,7 @@ module Railbow
         name_col_width = needs_name_truncation ? 60 : nil
 
         table_columns = [
-          Railbow::Table::Column.new(label: "Status", max_width: 6, sticky: true),
+          Railbow::Table::Column.new(label: "Status", max_width: 6, sticky: true, accent: true),
           Railbow::Table::Column.new(label: "Migration ID", sticky: true),
           Railbow::Table::Column.new(label: "Created At"),
           Railbow::Table::Column.new(label: "Migration Name",
@@ -57,7 +57,9 @@ module Railbow
 
         # Build rows
         highlight_rows = Set.new
+        down_rows = Set.new
         rows = migrations.each_with_index.map do |m, idx|
+          down_rows << idx if m[:status] == "down"
           colored_status = case m[:status]
           when "up" then formatter.green_bold("up")
           when "down" then formatter.yellow_bold("down")
@@ -148,7 +150,8 @@ module Railbow
           compact: {oneline: false, dense: false, noheader: false, maxw: nil, hidden_columns: []},
           aliases: aliases
         )
-        puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows, tick_rows: tick_rows, tick_col: 2)
+        puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows,
+          dim_rows: down_rows, tick_rows: tick_rows, tick_col: 2)
       end
 
       private

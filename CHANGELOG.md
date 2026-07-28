@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Migrations that are not applied (`down`) now render as a greyed-out row in
+  `db:migrate:status`, instead of signalling their state through the status
+  column alone. The row keeps its layout and its status glyph keeps its color;
+  everything else drops its own colors, so pending migrations read as inactive
+  next to the applied ones.
+
 ## [0.3.0] - 2026-07-23
 
 ### Added

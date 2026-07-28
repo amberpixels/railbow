@@ -565,7 +565,7 @@ module Railbow
       needs_name_truncation = tables_enabled || author_mode == "all" || diff_enabled || has_landed_tags
       name_col_width = needs_name_truncation ? 60 : nil
       table_columns = [
-        Railbow::Table::Column.new(label: "Status", max_width: 6, sticky: true),
+        Railbow::Table::Column.new(label: "Status", max_width: 6, sticky: true, accent: true),
         Railbow::Table::Column.new(label: "Migration ID", sticky: true),
         Railbow::Table::Column.new(label: (date_format == "full") ? "Created At" : "Date"),
         Railbow::Table::Column.new(label: "Migration Name",
@@ -590,10 +590,14 @@ module Railbow
         {}
       end
 
-      # Build rows and track highlight/ghost indices
+      # Build rows and track highlight/ghost/down indices
       highlight_rows = Set.new
       ghost_rows = Set.new
+      down_rows = Set.new
       rows = db_list.each_with_index.map do |(status, version, name), idx|
+        # A pending migration is not in effect yet: grey the whole row out so it
+        # reads as inactive next to the applied ones.
+        down_rows << idx if status == "down"
         colored_status = case status
         when "up" then formatter.green_bold("up")
         when "down" then formatter.yellow_bold("down")
@@ -783,7 +787,8 @@ module Railbow
         aliases: Railbow::Config.table_aliases
       )
       tick_col = 2 # Date column index
-      puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows, ghost_rows: ghost_rows, tick_rows: tick_rows, tick_col: tick_col)
+      puts renderer.render(rows, separators: separators, highlight_rows: highlight_rows, ghost_rows: ghost_rows,
+        dim_rows: down_rows, tick_rows: tick_rows, tick_col: tick_col)
     end
   end
 end

@@ -207,6 +207,66 @@ RSpec.describe Railbow::Table::Renderer do
     end
   end
 
+  describe "dim_rows" do
+    let(:columns) do
+      [
+        Railbow::Table::Column.new(label: "Status"),
+        Railbow::Table::Column.new(label: "Name")
+      ]
+    end
+    let(:renderer) do
+      described_class.new(columns: columns, theme: Railbow::Table::Themes::WALLS)
+    end
+    let(:dimmed) { Railbow::Table::Renderer::DIMMED_FG }
+
+    it "greys every cell of a dimmed row and drops the cell's own colors" do
+      rows = [["\e[33m\e[1mdown\e[0m", "\e[38;5;39m● bills\e[0m"], ["up", "● pets"]]
+      lines = renderer.render(rows, dim_rows: Set[0]).split("\n")
+
+      expect(lines[1]).to include(dimmed)
+      expect(lines[1]).not_to include("\e[33m")     # status color dropped
+      expect(lines[1]).not_to include("\e[38;5;39m") # table tag color dropped
+      expect(strip_ansi(lines[1])).to include("down")
+      expect(strip_ansi(lines[1])).to include("● bills")
+      expect(lines[2]).not_to include(dimmed)
+    end
+
+    it "leaves an accent column its own color while the rest of the row greys out" do
+      accent_columns = [
+        Railbow::Table::Column.new(label: "Status", accent: true),
+        Railbow::Table::Column.new(label: "Name")
+      ]
+      renderer = described_class.new(columns: accent_columns, theme: Railbow::Table::Themes::WALLS)
+      rows = [["\e[33m\e[1m↓↓\e[0m", "\e[38;5;39m● bills\e[0m"]]
+      row = renderer.render(rows, dim_rows: Set[0]).split("\n")[1]
+
+      status, name = row.split("│")
+      expect(status).to include("\e[33m")
+      expect(status).not_to include(dimmed)
+      expect(name).to include(dimmed)
+      expect(name).not_to include("\e[38;5;39m")
+    end
+
+    it "keeps column widths intact when a row is dimmed" do
+      rows = [["down", "AddPosts"], ["up", "CreateUsers"]]
+      plain = described_class.new(columns: columns, theme: Railbow::Table::Themes::WALLS)
+        .render(rows).split("\n")
+      dim = renderer.render(rows, dim_rows: Set[0]).split("\n")
+
+      expect(strip_ansi(dim[1])).to eq(strip_ansi(plain[1]))
+    end
+
+    it "lets ghost styling win over dim, and dim win over highlight" do
+      rows = [["down", "Gone"], ["down", "Mine"]]
+      lines = renderer.render(rows, dim_rows: Set[0, 1], ghost_rows: Set[0], highlight_rows: Set[1]).split("\n")
+
+      expect(lines[1]).to include(Railbow::Table::Renderer::GHOST_BG)
+      expect(lines[1]).not_to include(dimmed)
+      expect(lines[2]).to include(dimmed)
+      expect(lines[2]).not_to include(Railbow::Table::Renderer::WHITE)
+    end
+  end
+
   describe "terminal-width wrapping of last column" do
     it "wraps the last column within its column space (PLAIN)" do
       columns = [

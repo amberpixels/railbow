@@ -10,8 +10,9 @@ module Railbow
 
       RESET = "\e[0m"
       WHITE = "\e[97m"
-      GHOST_BG = "\e[48;5;52m"    # deep red/maroon background — stands out as abnormal
+      GHOST_BG = "\e[48;5;52m"    # deep red/maroon background - stands out as abnormal
       GHOST_FG = "\e[38;5;217m"   # warm pink foreground for contrast
+      DIMMED_FG = "\e[38;5;242m"  # muted grey - a row that is not currently in effect
 
       attr_reader :columns, :theme
 
@@ -23,7 +24,7 @@ module Railbow
         @theme = theme
       end
 
-      def render(rows, separators: {}, highlight_rows: Set.new, ghost_rows: Set.new, tick_rows: Set.new, tick_col: nil)
+      def render(rows, separators: {}, highlight_rows: Set.new, ghost_rows: Set.new, dim_rows: Set.new, tick_rows: Set.new, tick_col: nil)
         return "" if columns.empty?
 
         # Remap rows if columns were hidden
@@ -69,7 +70,8 @@ module Railbow
             lines << render_row(sep_row, resolved, tick_col: tc, tick_cross: true)
             tc = nil # tick already shown on separator row
           end
-          formatted = render_row(row, resolved, tick_col: tc, highlight: highlight_rows.include?(i), ghost: ghost_rows.include?(i))
+          formatted = render_row(row, resolved, tick_col: tc, highlight: highlight_rows.include?(i),
+            ghost: ghost_rows.include?(i), dim: dim_rows.include?(i))
           lines << formatted
         end
         lines.join("\n")
@@ -112,7 +114,7 @@ module Railbow
         }.join(theme.header_col_separator)
       end
 
-      def render_row(row, widths, tick_col: nil, tick_cross: false, highlight: false, ghost: false)
+      def render_row(row, widths, tick_col: nil, tick_cross: false, highlight: false, ghost: false, dim: false)
         last = columns.size - 1
         pad = effective_padding
         default_sep = theme.col_separator
@@ -123,11 +125,7 @@ module Railbow
           cell_w = display_width(strip_ansi(s))
           padding = " " * [widths[i] - cell_w, 0].max
           content = (columns[i].align == :right) ? "#{padding}#{s}" : "#{s}#{padding}"
-          if ghost
-            content = "#{GHOST_BG}#{GHOST_FG}#{content}#{RESET}"
-          elsif highlight
-            content = "#{WHITE}#{content}#{RESET}"
-          end
+          content = style_cell(content, highlight: highlight, ghost: ghost, dim: dim, accent: columns[i].accent)
           "#{pad}#{content}#{RESET}#{pad}"
         }
 
@@ -146,10 +144,10 @@ module Railbow
         # Separator before the last column has index (last - 1)
         last_sep_idx = last - 1
         last_sep = (tick_col && (last_sep_idx == tick_col - 1 || last_sep_idx == tick_col)) ? tick_sep : default_sep
-        render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: last_sep, highlight: highlight, ghost: ghost)
+        render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: last_sep, highlight: highlight, ghost: ghost, dim: dim)
       end
 
-      def render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: nil, highlight: false, ghost: false)
+      def render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: nil, highlight: false, ghost: false, dim: false)
         pad = effective_padding
         sep = col_sep || theme.col_separator
 
@@ -167,7 +165,7 @@ module Railbow
         if columns[last].truncate_fn && last_col_max &&
             display_width(last_cell_plain) > last_col_max
           last_cell_raw = columns[last].truncate_fn.call(last_cell_raw, last_col_max)
-          last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost)
+          last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost, dim: dim, accent: columns[last].accent)
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
@@ -175,18 +173,18 @@ module Railbow
         if columns[last].truncate && !columns[last].max_width && last_col_max &&
             display_width(last_cell_plain) > last_col_max
           last_cell_raw = truncate_by_words(last_cell_raw, last_col_max)
-          last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost)
+          last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost, dim: dim, accent: columns[last].accent)
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
         # In oneline mode, truncate instead of wrapping
         if @compact[:oneline] && last_col_max && display_width(last_cell_plain) > last_col_max
           last_cell_raw = truncate_by_words(last_cell_raw, last_col_max)
-          last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost)
+          last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost, dim: dim, accent: columns[last].accent)
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
-        last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost)
+        last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost, dim: dim, accent: columns[last].accent)
 
         if last_col_max && display_width(strip_ansi(last_cell_raw)) > last_col_max
           blank_prefix = prefix_parts.map { |part|
@@ -201,9 +199,17 @@ module Railbow
         end
       end
 
-      def style_cell(content, highlight: false, ghost: false)
+      def style_cell(content, highlight: false, ghost: false, dim: false, accent: false)
         if ghost
           "#{GHOST_BG}#{GHOST_FG}#{content}#{RESET}"
+        elsif dim
+          # An accent column keeps its color - on a dimmed row it is the one
+          # cell still carrying meaning. Everything else drops its own colors:
+          # one flat grey is what reads as "not in effect", and the resets that
+          # end each inner color would break the grey run anyway.
+          return content if accent
+
+          "#{DIMMED_FG}#{strip_ansi(content)}#{RESET}"
         elsif highlight
           "#{WHITE}#{content}#{RESET}"
         else
