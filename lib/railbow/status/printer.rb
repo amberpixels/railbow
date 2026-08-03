@@ -263,8 +263,20 @@ module Railbow
         head += "#{RULE * 4} #{shown_count(section)} of #{section.total_count} " if section.hidden_count > 0
 
         width = (rule_width > 0) ? rule_width : DEFAULT_RULE_WIDTH
+        if (term = terminal_width)
+          width = [width, term].min
+        end
         filler = [width - formatter.display_width(head), 4].max
         "#{PURPLE}#{head}#{RULE * filler}#{RESET}"
+      end
+
+      # The rule frames the table, but on a narrow terminal the table itself
+      # gives up width, so the rule must never trust fixed_width alone.
+      def terminal_width
+        return $stdout.winsize[1] if $stdout.respond_to?(:winsize) && $stdout.tty?
+        nil
+      rescue
+        nil
       end
 
       # A bare "10 of 50" reads as "10 fell inside the window". When the floor

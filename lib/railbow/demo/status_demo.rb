@@ -48,15 +48,17 @@ module Railbow
         table_columns = [
           Railbow::Table::Column.new(label: "Status", max_width: 6, sticky: true, accent: true),
           Railbow::Table::Column.new(label: "Migration ID", sticky: true),
-          Railbow::Table::Column.new(label: "Created At"),
+          Railbow::Table::Column.new(label: "Created At", droppable: 2),
           Railbow::Table::Column.new(label: "Migration Name",
             max_width: name_col_width,
-            truncate: needs_name_truncation)
+            truncate: needs_name_truncation,
+            shrinkable: true, shrink_floor: 24)
         ]
         # No Author column in default config (author:me only highlights)
 
         tables_truncate_fn = ->(cell_raw, max_w) { formatter.table_tags_fitted(cell_raw, max_w) }
-        table_columns << Railbow::Table::Column.new(label: "Tables", truncate: true, truncate_fn: tables_truncate_fn)
+        table_columns << Railbow::Table::Column.new(label: "Tables", droppable: 1,
+          truncate: true, truncate_fn: tables_truncate_fn)
 
         # Build rows
         highlight_rows = Set.new

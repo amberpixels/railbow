@@ -360,6 +360,82 @@ RSpec.describe Railbow::Table::Renderer do
     end
   end
 
+  describe "width budget" do
+    let(:columns) do
+      [
+        Railbow::Table::Column.new(label: "St"),
+        Railbow::Table::Column.new(label: "Name", shrinkable: true, shrink_floor: 10),
+        Railbow::Table::Column.new(label: "Date", droppable: 2),
+        Railbow::Table::Column.new(label: "Tables", droppable: 1)
+      ]
+    end
+
+    let(:rows) do
+      [["up", "a" * 30, "2026-01-01", "x" * 10]]
+    end
+
+    def renderer_at(width)
+      described_class.new(columns: columns, theme: Railbow::Table::Themes::WALLS, term_width: width)
+    end
+
+    it "changes nothing when the table fits" do
+      lines = strip_ansi(renderer_at(120).render(rows)).split("\n")
+      expect(lines.size).to eq(2)
+      expect(lines[1]).to include("a" * 30)
+      expect(lines[1]).to include("2026-01-01")
+      expect(lines[1]).to include("x" * 10)
+    end
+
+    it "shrinks the shrinkable column before dropping anything" do
+      lines = strip_ansi(renderer_at(55).render(rows)).split("\n")
+      expect(lines.size).to eq(2)
+      expect(lines[1].length).to be <= 55
+      expect(lines[1]).to include("...")           # name got truncated
+      expect(lines[1]).to include("2026-01-01")    # nothing dropped
+      expect(lines[1]).to include("x" * 10)
+    end
+
+    it "drops the lowest-ranked droppable column when shrinking is not enough" do
+      lines = strip_ansi(renderer_at(40).render(rows)).split("\n")
+      expect(lines.size).to eq(2)
+      expect(lines[1].length).to be <= 40
+      expect(lines[0]).not_to include("Tables")
+      expect(lines[1]).not_to include("x")
+      expect(lines[1]).to include("2026-01-01")    # rank 2 survives at this width
+    end
+
+    it "keeps dropping by rank until the table fits" do
+      result = strip_ansi(renderer_at(25).render(rows))
+      expect(result).not_to include("Tables")
+      expect(result).not_to include("2026-01-01")
+      expect(result).to include("aaa")             # name content survives
+    end
+
+    it "shrinks an ANSI-colored cell without leaking its color" do
+      colored = [["up", "\e[32m#{"a" * 30}\e[0m", "2026-01-01", "x" * 10]]
+      line = renderer_at(55).render(colored).split("\n")[1]
+      expect(strip_ansi(line).length).to be <= 55
+      expect(line).to include("\e[32m")
+      # The green opened in the name cell is closed before the ellipsis
+      expect(strip_ansi(line)).to include("...")
+    end
+
+    it "shifts the tick column when a column before it is dropped, and drops it with its column" do
+      tick_columns = [
+        Railbow::Table::Column.new(label: "St"),
+        Railbow::Table::Column.new(label: "Gone", droppable: 1),
+        Railbow::Table::Column.new(label: "Date"),
+        Railbow::Table::Column.new(label: "Name")
+      ]
+      renderer = described_class.new(columns: tick_columns, theme: Railbow::Table::Themes::WALLS, term_width: 30)
+      tick_rows = [["up", "g" * 20, "2026-01-01", "n" * 20]]
+      result = renderer.render(tick_rows, separators: {0 => "Jan"}, tick_rows: Set[0], tick_col: 2)
+      expect(strip_ansi(result)).not_to include("g" * 20)
+      # Tick separator (┼ on the separator row) still lands next to Date
+      expect(result).to include("Jan")
+    end
+  end
+
   describe "ANSI-colored content" do
     it "correctly measures width ignoring ANSI codes" do
       columns = [

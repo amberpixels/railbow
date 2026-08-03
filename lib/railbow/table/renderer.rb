@@ -14,15 +14,25 @@ module Railbow
       GHOST_FG = "\e[38;5;217m"   # warm pink foreground for contrast
       DIMMED_FG = "\e[38;5;242m"  # muted grey - a row that is not currently in effect
 
+      # The flexing last column never gets less than this from the terminal.
+      MIN_LAST_COL = 10
+      # Default floor for shrinkable columns that name no shrink_floor.
+      MIN_SHRINK_WIDTH = 16
+
       attr_reader :columns, :theme
 
       # min_widths raises the resolved width of each column to at least the
       # given value, which is how several tables rendered in one run line their
       # columns up with each other. An explicit compact maxw still wins.
-      def initialize(columns:, theme:, compact: {}, aliases: {}, min_widths: nil)
+      #
+      # term_width overrides the detected terminal width; render re-invokes
+      # itself through a reduced renderer when the budget drops a column, and
+      # the width it fits must be the same one this instance measured.
+      def initialize(columns:, theme:, compact: {}, aliases: {}, min_widths: nil, term_width: nil)
         @compact = compact
         @aliases = aliases
         @min_widths = min_widths
+        @term_width = term_width
         @reverse_col_aliases = aliases[:columns]&.invert || {}
         @columns = apply_hidden_columns(columns)
         @theme = theme
@@ -50,7 +60,21 @@ module Railbow
         return "" if columns.empty?
 
         rows = prepare_rows(rows)
+
+        # Width budget: when even fully shrunk columns cannot bring the table
+        # under the terminal width, sacrifice the most expendable column and
+        # render without it. One column per pass - the reduced renderer asks
+        # again with what is left.
+        if (drop = drop_index_to_fit(rows))
+          return dropped_renderer(drop).render(
+            rows.map { |row| row.reject.with_index { |_, i| i == drop } },
+            separators: separators, highlight_rows: highlight_rows, ghost_rows: ghost_rows,
+            dim_rows: dim_rows, tick_rows: tick_rows, tick_col: shift_tick_col(tick_col, drop)
+          )
+        end
+
         resolved = resolve_widths(rows)
+        shrink_to_fit!(resolved, rows)
 
         # In oneline mode, truncate non-sticky non-last columns at resolved width
         if @compact[:oneline]
@@ -209,7 +233,7 @@ module Railbow
         last_cell_plain = strip_ansi(last_cell_raw)
         term_w = terminal_width
         prefix_width = compute_prefix_width(widths, last)
-        last_col_max = term_w ? [term_w - prefix_width - display_width(pad), 10].max : nil
+        last_col_max = term_w ? [term_w - prefix_width - display_width(pad), MIN_LAST_COL].max : nil
 
         # Use custom truncate_fn if available (e.g. table tags with +N)
         if columns[last].truncate_fn && last_col_max &&
@@ -305,10 +329,96 @@ module Railbow
       end
 
       def terminal_width
+        return @term_width if @term_width
         return $stdout.winsize[1] if $stdout.respond_to?(:winsize) && $stdout.tty?
         nil
       rescue
         nil
+      end
+
+      # --- Width budget ---
+
+      # The index of the column to sacrifice, or nil while shrinking alone can
+      # still fit the table into the terminal.
+      def drop_index_to_fit(rows)
+        return nil unless terminal_width
+        return nil if rows.empty?
+
+        candidate = columns.each_index
+          .select { |i| columns[i].droppable }
+          .min_by { |i| columns[i].droppable }
+        return nil unless candidate
+        return nil if required_width(fully_shrunk_widths(rows), rows) <= terminal_width
+
+        candidate
+      end
+
+      def dropped_renderer(drop)
+        self.class.new(
+          columns: columns.reject.with_index { |_, i| i == drop },
+          theme: theme,
+          compact: @compact,
+          aliases: @aliases,
+          min_widths: @min_widths&.reject&.with_index { |_, i| i == drop },
+          term_width: terminal_width
+        )
+      end
+
+      def shift_tick_col(tick_col, drop)
+        return nil if tick_col.nil? || drop == tick_col
+
+        (drop < tick_col) ? tick_col - 1 : tick_col
+      end
+
+      # Narrows shrinkable columns just enough to close the overflow, and
+      # re-truncates their cells to the new width.
+      def shrink_to_fit!(widths, rows)
+        return if rows.empty? || !terminal_width
+
+        overflow = required_width(widths, rows) - terminal_width
+        return if overflow <= 0
+
+        last = columns.size - 1
+        columns.each_with_index do |col, i|
+          break if overflow <= 0
+          next if i == last || !col.shrinkable
+
+          cut = [widths[i] - shrink_floor(col), overflow].min
+          next if cut <= 0
+
+          widths[i] -= cut
+          overflow -= cut
+          rows.each { |row| row[i] = truncate_ansi(row[i].to_s, widths[i]) }
+        end
+      end
+
+      # Never below the header label: a column narrower than its own header
+      # would push the header row out of alignment.
+      def shrink_floor(col)
+        [col.shrink_floor || MIN_SHRINK_WIDTH, display_width(effective_label(col))].max
+      end
+
+      def fully_shrunk_widths(rows)
+        widths = resolve_widths(rows)
+        last = columns.size - 1
+        columns.each_with_index do |col, i|
+          next if i == last || !col.shrinkable
+
+          widths[i] = [widths[i], shrink_floor(col)].min
+        end
+        widths
+      end
+
+      # What the table needs from the terminal: every fixed column plus a
+      # reserve for the flexing last column, which truncates down to
+      # MIN_LAST_COL but never below it. The last column's header label counts
+      # too - it is drawn as-is, so a label wider than every cell would poke
+      # past the terminal edge otherwise.
+      def required_width(widths, rows)
+        last = columns.size - 1
+        last_w = rows.map { |row| display_width(strip_ansi(row[last].to_s)) }.max || 0
+        last_w = [last_w, display_width(effective_label(columns[last]))].max unless @compact[:noheader]
+        compute_prefix_width(widths, last) + [last_w, MIN_LAST_COL].min + display_width(effective_padding)
       end
 
       def ansi_word_wrap(str, max_width)

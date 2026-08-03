@@ -30,6 +30,10 @@ module Railbow
       # with it for horizontal space (tags, authors, table names).
       NAME_COL_WIDTH = 60
 
+      # Floor the width budget may shrink the name column down to on a narrow
+      # terminal, before it starts dropping columns instead.
+      NAME_COL_MIN_WIDTH = 24
+
       NO_FILE = "NO FILE"
 
       # A version one database in a shard group has and another does not.
@@ -311,6 +315,11 @@ module Railbow
 
       # The name column only needs capping when something else competes for the
       # row: table tags, an author column, branch badges or landed badges.
+      #
+      # On a terminal too narrow for the full row the width budget degrades the
+      # table instead of letting it wrap: the name column shrinks first, then
+      # Tables is dropped, then the formatted date (the raw Migration ID keeps
+      # the timestamp), then Who.
       def build_columns
         @name_col_width = needs_name_truncation? ? NAME_COL_WIDTH : nil
 
@@ -318,15 +327,17 @@ module Railbow
           Table::Column.new(label: "Status", max_width: status_col_width,
             sticky: true, accent: true, aliased: !sharded?),
           Table::Column.new(label: "Migration ID", sticky: true),
-          Table::Column.new(label: (date_format == "full") ? "Created At" : "Date"),
+          Table::Column.new(label: (date_format == "full") ? "Created At" : "Date",
+            droppable: 2),
           Table::Column.new(label: "Migration Name",
             max_width: @name_col_width,
-            truncate: !@name_col_width.nil?)
+            truncate: !@name_col_width.nil?,
+            shrinkable: true, shrink_floor: NAME_COL_MIN_WIDTH)
         ]
-        cols << Table::Column.new(label: "Who") if author_mode == "all"
+        cols << Table::Column.new(label: "Who", droppable: 3) if author_mode == "all"
         if tables_enabled?
           truncate_fn = ->(cell_raw, max_w) { formatter.table_tags_fitted(cell_raw, max_w) }
-          cols << Table::Column.new(label: "Tables",
+          cols << Table::Column.new(label: "Tables", droppable: 1,
             truncate: Railbow::Params.compact_oneline?, truncate_fn: truncate_fn)
         end
         cols
