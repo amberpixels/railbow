@@ -332,6 +332,7 @@ module Railbow
           Table::Column.new(label: "Migration Name",
             max_width: @name_col_width,
             truncate: !@name_col_width.nil?,
+            truncate_fn: ->(cell_raw, max_w) { formatter.name_with_tags_fitted(cell_raw, max_w) },
             shrinkable: true, shrink_floor: NAME_COL_MIN_WIDTH)
         ]
         cols << Table::Column.new(label: "Who", droppable: 3) if author_mode == "all"

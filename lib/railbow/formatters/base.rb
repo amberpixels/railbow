@@ -34,6 +34,9 @@ module Railbow
 
       BRIGHT_WHITE = "\e[1;97m"
 
+      # Narrowest name a tagged cell will accept before the tags are dropped.
+      NAME_TAGS_FLOOR = 12
+
       def dim(str) = "#{DIM}#{str}#{RESET}"
       def green(str) = "#{GREEN}#{str}#{RESET}"
       def yellow(str) = "#{YELLOW}#{str}#{RESET}"
@@ -113,6 +116,32 @@ module Railbow
 
         # Absolute fallback: just +N
         "+#{total}"
+      end
+
+      # Re-fits a Migration Name cell whose tags (branch, landed) were padded
+      # flush against the right edge of a wider column. Truncating such a cell
+      # from the right eats the tags whole and leaves a bare ellipsis floating
+      # after the padding, so the name gives up the space instead and the tags
+      # stay put. Below NAME_TAGS_FLOOR there is no room for both and the tags
+      # are dropped outright - the name is what the row is about.
+      def name_with_tags_fitted(cell, max_width)
+        str = cell.to_s
+        return truncate_ansi(str, max_width) if display_width(strip_ansi(str)) <= max_width
+
+        split = str.rindex(/\s{2,}\e\[/)
+        return truncate_ansi(str, max_width) unless split
+
+        # rindex stops at the last two spaces of the padding run, so the rest of
+        # it still hangs off the name and would be truncated in place of it.
+        name = str[0...split].rstrip
+        tags = str[split..].lstrip
+        tags_width = display_width(strip_ansi(tags))
+        name_room = max_width - tags_width - 2
+        return truncate_ansi(name, max_width) if name_room < NAME_TAGS_FLOOR
+
+        name = truncate_ansi(name, name_room)
+        padding = max_width - display_width(strip_ansi(name)) - tags_width
+        "#{name}#{" " * [padding, 2].max}#{tags}"
       end
 
       def format_timing(seconds)

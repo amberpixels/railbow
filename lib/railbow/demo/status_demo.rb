@@ -52,6 +52,7 @@ module Railbow
           Railbow::Table::Column.new(label: "Migration Name",
             max_width: name_col_width,
             truncate: needs_name_truncation,
+            truncate_fn: ->(cell_raw, max_w) { formatter.name_with_tags_fitted(cell_raw, max_w) },
             shrinkable: true, shrink_floor: 24)
         ]
         # No Author column in default config (author:me only highlights)

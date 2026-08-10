@@ -420,6 +420,30 @@ RSpec.describe Railbow::Table::Renderer do
       expect(strip_ansi(line)).to include("...")
     end
 
+    it "re-fits a shrunk cell through the column's truncate_fn" do
+      # A cell whose tag is padded flush right: cutting it blindly from the
+      # right deletes the tag and leaves only an ellipsis behind.
+      fit_columns = [
+        Railbow::Table::Column.new(label: "St"),
+        Railbow::Table::Column.new(label: "Name", shrinkable: true, shrink_floor: 10,
+          truncate_fn: ->(cell, max_w) {
+            name, tag = cell.split(/\s{2,}/, 2)
+            name = name[0, [max_w - tag.length - 2, 1].max]
+            "#{name}#{" " * [max_w - name.length - tag.length, 2].max}#{tag}"
+          }),
+        Railbow::Table::Column.new(label: "Date", droppable: 2)
+      ]
+      tagged = [["up", "#{"a" * 20}#{" " * 6}TAG", "2026-01-01"]]
+      renderer = described_class.new(columns: fit_columns, theme: Railbow::Table::Themes::WALLS,
+        term_width: 45)
+
+      line = strip_ansi(renderer.render(tagged)).split("\n")[1]
+
+      expect(line.length).to be <= 45
+      expect(line).to include("TAG")
+      expect(line).to include("aaa")
+    end
+
     it "shifts the tick column when a column before it is dropped, and drops it with its column" do
       tick_columns = [
         Railbow::Table::Column.new(label: "St"),

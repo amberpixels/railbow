@@ -388,7 +388,11 @@ module Railbow
 
           widths[i] -= cut
           overflow -= cut
-          rows.each { |row| row[i] = truncate_ansi(row[i].to_s, widths[i]) }
+          # A column that knows how to re-fit its own cells does it here: a
+          # blind cut from the right would drop whatever the cell parked at its
+          # far edge (right-aligned tags) instead of shortening the content.
+          fit = col.truncate_fn || method(:truncate_ansi)
+          rows.each { |row| row[i] = fit.call(row[i].to_s, widths[i]) }
         end
       end
 

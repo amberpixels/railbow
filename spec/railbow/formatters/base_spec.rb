@@ -110,4 +110,71 @@ RSpec.describe Railbow::Formatters::Base do
       expect(result).to include("● users")
     end
   end
+
+  describe "#name_with_tags_fitted" do
+    # A name cell as the status table composes it: tags padded flush against
+    # the right edge of a 60 wide column.
+    def cell(name, tags, width: 60)
+      tags_width = formatter.display_width(formatter.strip_ansi(tags))
+      padding = width - formatter.display_width(name) - tags_width
+      "#{name}#{" " * [padding, 2].max}#{tags}"
+    end
+
+    let(:branch) { formatter.diff_tag_branch("PS-2569") }
+    let(:tagged) { cell("Readd goal tracking widgets", branch) }
+
+    def plain(str) = formatter.strip_ansi(str)
+
+    it "keeps the tag and shortens the name" do
+      result = formatter.name_with_tags_fitted(tagged, 40)
+
+      expect(plain(result)).to include("⎇ PS-2569")
+      expect(plain(result)).to start_with("Readd goal")
+      expect(formatter.display_width(plain(result))).to eq(40)
+    end
+
+    it "keeps a name that still fits intact, with no stray ellipsis" do
+      result = formatter.name_with_tags_fitted(tagged, 44)
+
+      expect(plain(result)).to eq("Readd goal tracking widgets        ⎇ PS-2569")
+    end
+
+    it "leaves a cell that already fits alone" do
+      expect(formatter.name_with_tags_fitted(tagged, 60)).to eq(tagged)
+    end
+
+    it "keeps the tag flush against the right edge" do
+      result = formatter.name_with_tags_fitted(tagged, 34)
+
+      expect(plain(result)).to end_with("⎇ PS-2569")
+    end
+
+    it "keeps every tag when a cell carries more than one" do
+      tags = [formatter.landed_tag(Date.new(2026, 8, 8)), branch].join(" ")
+      result = formatter.name_with_tags_fitted(cell("Readd goal tracking widgets", tags), 44)
+
+      expect(plain(result)).to include("↪ Aug 08")
+      expect(plain(result)).to include("⎇ PS-2569")
+    end
+
+    it "drops the tags when keeping them would leave no room for the name" do
+      wide = cell("Readd goal tracking widgets", formatter.diff_tag_branch("feature/quite-a-long-branch"))
+      result = formatter.name_with_tags_fitted(wide, 34)
+
+      expect(plain(result)).to eq("Readd goal tracking widgets")
+    end
+
+    it "falls back to plain truncation for an untagged name" do
+      result = formatter.name_with_tags_fitted("Add a migration name long enough to overflow", 24)
+
+      expect(plain(result)).to eq("Add a migration name ...")
+    end
+
+    it "never renders wider than the width it was given" do
+      [60, 44, 34, 24, 16].each do |width|
+        result = formatter.name_with_tags_fitted(tagged, width)
+        expect(formatter.display_width(plain(result))).to be <= width
+      end
+    end
+  end
 end

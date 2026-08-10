@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- On a narrow terminal, a migration's branch and landing badges no longer
+  vanish from the `db:migrate:status` name column, leaving a stray `...`
+  hanging in the padding where they used to sit. The badges are padded flush
+  against the right edge of the column, which is exactly where the width
+  budget was cutting; the name now gives up the space instead and the badges
+  stay put. When a badge is so wide that keeping it would leave under 12
+  columns for the name, it is dropped outright rather than squeezing the name
+  down to nothing.
+
 ## [0.6.0] - 2026-08-03
 
 ### Fixed
