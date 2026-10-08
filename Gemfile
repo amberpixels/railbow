@@ -9,7 +9,7 @@ gem "irb", "~> 1.18"
 gem "rake", "~> 13.4"
 gem "rspec", "~> 3.13"
 gem "benchmark", "~> 0.5"
-gem "standard", "~> 1.54"
+gem "standard", "~> 1.57"
 
 # Optional integration: recovers ghost migrations in migrate:status
 gem "mighost", "~> 0.5"
