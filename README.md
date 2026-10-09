@@ -236,7 +236,21 @@ HTTP verbs are color-coded (GET=green, POST=yellow, PATCH/PUT=cyan, DELETE=red),
 
 ### `rails stats`
 
-Code statistics rendered as a colorful table with highlighted totals and code-to-test ratio.
+Code statistics in the same table style as `db:migrate:status`, code and tests grouped, with each directory's share of all LOC:
+
+```
+ Name          Lines     LOC       Classes   Methods   M/C   LOC/M   Share of LOC
+ Code        │         │         │         │         │     │       │
+ Controllers │  57,143 │  42,693 │     212 │   3,472 │  16 │    10 │ █████████▊       22.0%
+ Models      │  76,529 │  48,353 │     302 │   4,819 │  15 │     8 │ ███████████      24.9%
+ Views       │  98,412 │  70,120 │       0 │       0 │   0 │     0 │ ████████████████ 36.1%
+ Tests       │         │         │         │         │     │       │
+ Model specs │  40,210 │  33,000 │       0 │     120 │   0 │   273 │ ███████▌         17.0%
+             │         │         │         │         │     │       │
+ Total       │ 272,294 │ 194,166 │     514 │   8,411 │  16 │    21 │
+
+  Code 161,166 LOC   ·   Tests 33,000 LOC   ·   Code to Test Ratio 1:0.2
+```
 
 ### `rails notes`
 

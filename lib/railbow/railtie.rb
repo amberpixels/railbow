@@ -34,6 +34,14 @@ module Railbow
       Rails::SourceAnnotationExtractor.prepend(Railbow::NotesFormatter)
     end
 
+    # Enhance `rails stats` output. Since Rails 8.0 it is a Rails command that
+    # boots the app but never loads rake tasks, so this cannot live in a .rake
+    # file alone.
+    initializer "railbow.enhance_stats", after: :load_config_initializers do
+      require_relative "stats_formatter"
+      Railbow::StatsFormatter.install!
+    end
+
     # Load custom Rake tasks
     rake_tasks do
       load "railbow/tasks/migrate_status.rake"

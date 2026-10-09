@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   numbers share one accent color, the application root steps back, and list
   values such as Middleware get a line per item. The Rails title line is kept,
   and the old "Property / Value" header row is gone.
+- `rails stats` is redrawn in the `db:migrate:status` table style: code and
+  test directories under their own headings, thousands grouped, zeros dimmed,
+  M/C and LOC/M dimmed for tests, a bar for each directory's share of all LOC,
+  and a bold Total row. Directories registered by other gems (such as
+  rspec-rails) are included.
 
 ### Fixed
 
@@ -44,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Migration IDs are UTC timestamps but were read as local time.
 - `rails about` no longer crashes with `uninitialized class variable
   @@properties in Railbow::AboutFormatter`.
+- `rails stats` is formatted again. Since Rails 8.0 it is a Rails command
+  that never loads rake tasks, so railbow's hook never ran, and on every Rails
+  version the formatter read the wrong data and printed nothing of its own.
+  On Rails 7.2 and 8.0, `rake stats` no longer risks running railbow's
+  Rails 8.1 replacement task next to the stock one.
 
 ## [0.6.2] - 2026-09-21
 
