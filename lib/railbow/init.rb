@@ -20,7 +20,7 @@ module Railbow
       # Every key can also be overridden via RBW_* environment variables.
 
       # Time window for migrations to display (e.g. 30d, 2mo, 1y, all)
-      since: "70d"
+      since: "90d"
 
       # Never show fewer than this many migrations, however old they are.
       # The window above is a soft limit: a database with five migrations shows

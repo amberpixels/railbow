@@ -129,8 +129,8 @@ RSpec.describe Railbow::Params do
   end
 
   describe ".since" do
-    it "defaults to '70d' from config" do
-      expect(described_class.since).to eq("70d")
+    it "defaults to '90d' from config" do
+      expect(described_class.since).to eq("90d")
     end
 
     it "can be set to 'all' via ENV override" do

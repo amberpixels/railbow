@@ -62,7 +62,7 @@ RSpec.describe Railbow::Init do
       run_with_choice("2")
 
       content = File.read(File.join(dir, ".railbow.yml"))
-      expect(content).to include('since: "70d"')
+      expect(content).to include('since: "90d"')
       expect(content).to include('git: "author:all,diff,mask:auto"')
       expect(content).to include('author_format: "short"')
       expect(content).to include('view: "calendar,tables"')

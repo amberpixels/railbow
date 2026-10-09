@@ -31,6 +31,9 @@ module Railbow
 
     PALETTE = Formatters::Base::TABLE_PALETTE
 
+    # git blame's author-mail for lines not committed yet
+    UNCOMMITTED_EMAIL = "not.committed.yet"
+
     def display(results, options = {})
       return super if Railbow.plain?
 
@@ -100,9 +103,12 @@ module Railbow
       author_colors = nil
       author_display = {}
       if author_mode == "all"
-        author_names = entries.filter_map { |e| e.dig(:blame, :author) }.uniq
+        author_names = entries.reject { |e| uncommitted?(e[:blame]) }
+          .filter_map { |e| e.dig(:blame, :author) }.uniq
         author_colors = ColorAssigner.new(author_names)
         author_display = Railbow::Params.format_authors(author_names)
+        # Uncommitted notes have no author; dashes fill the author column instead
+        no_author = "-" * (author_display.values.map(&:length).max || 4)
       end
       if show_date || author_mode == "all"
         entries.each do |entry|
@@ -145,7 +151,11 @@ module Railbow
           author_name = author_display[raw_author] || Railbow::Params.format_author(raw_author)
           blame_date = blame_info[:date] ? blame_info[:date].strftime("%Y-%m-%d") : ""
           padding = " " * [(max_loc_width - location.length + 2), 2].max
-          colored_author = "#{author_colors.color_for(raw_author)}#{author_name}#{RESET}"
+          colored_author = if uncommitted?(blame_info)
+            "#{DIM}#{no_author}#{RESET}"
+          else
+            "#{author_colors.color_for(raw_author)}#{author_name}#{RESET}"
+          end
           meta = "#{colored_author}  #{DIM}#{blame_date}#{RESET}"
           loc_line = " #{colored_bar} #{location}#{padding}#{meta}"
         elsif author_mode == "me" && is_mine && blame_info
@@ -201,8 +211,11 @@ module Railbow
     def blame_file(path)
       return {} unless File.exist?(path)
 
-      output, status = Railbow::GitUtils.capture2("blame", "--porcelain", path)
-      return {} unless status.success?
+      # stderr is captured so "no such path in HEAD" never reaches the terminal
+      output, _err, status = Railbow::GitUtils.capture3("blame", "--porcelain", path)
+      # Untracked or ignored files (e.g. app/assets/builds) count as uncommitted,
+      # the way git blame dates uncommitted lines, so RBW_SINCE keeps them
+      return Hash.new(uncommitted_blame) unless status.success?
 
       result = {}
       current_line = nil
@@ -236,6 +249,18 @@ module Railbow
       end
 
       result
+    end
+
+    def uncommitted_blame
+      {
+        author: "Not Committed Yet",
+        email: UNCOMMITTED_EMAIL,
+        date: Railbow::Clock.in_zone(Time.now).to_date
+      }.freeze
+    end
+
+    def uncommitted?(blame_info)
+      blame_info&.dig(:email) == UNCOMMITTED_EMAIL
     end
 
     def current_git_email

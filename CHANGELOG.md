@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   M/C and LOC/M dimmed for tests, a bar for each directory's share of all LOC,
   and a bold Total row. Directories registered by other gems (such as
   rspec-rails) are included.
+- The default `since` window is now 90 days (was 70), close to three months.
+  Set `since: 70d` (or `RBW_SINCE=70d`) to keep the old window.
 
 ### Fixed
 
@@ -54,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version the formatter read the wrong data and printed nothing of its own.
   On Rails 7.2 and 8.0, `rake stats` no longer risks running railbow's
   Rails 8.1 replacement task next to the stock one.
+- `rails notes` no longer prints `fatal: no such path ... in HEAD` for notes
+  in untracked or gitignored files (such as `app/assets/builds`), and no
+  longer hides those notes as older than the `since` window. They are dated
+  as uncommitted, the way `git blame` dates uncommitted lines, and with
+  `RBW_GIT=author` they show dim dashes in the author column instead of git's
+  "Not Committed Yet" squeezed into a name like "No Y".
 
 ## [0.6.2] - 2026-09-21
 

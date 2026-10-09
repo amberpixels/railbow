@@ -161,7 +161,7 @@ RSpec.describe Railbow::MigrateStatusFormatter do
 
     before do
       allow(Railbow).to receive(:plain?).and_return(false)
-      allow(Railbow::Params).to receive(:since).and_return("70d")
+      allow(Railbow::Params).to receive(:since).and_return("90d")
       allow(Mighost).to receive(:enabled?).and_return(false) if defined?(Mighost)
     end
 
@@ -180,7 +180,7 @@ RSpec.describe Railbow::MigrateStatusFormatter do
       stub_connection_pool(old_migrations(15))
 
       output = render_status
-      expect(output).to include("5 older migrations hidden - SINCE=70d, showing the last 10")
+      expect(output).to include("5 older migrations hidden - SINCE=90d, showing the last 10")
       expect(output).to include("Add Apples 15")
       expect(output).not_to include("Add Apples 5\e")
     end

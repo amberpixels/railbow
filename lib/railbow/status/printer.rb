@@ -85,7 +85,7 @@ module Railbow
         puts render_table(section)
       end
 
-      # Admits when the floor overrode the window: a bare "hidden - SINCE=70d"
+      # Admits when the floor overrode the window: a bare "hidden - SINCE=90d"
       # would contradict the older rows shown below it.
       def hidden_note(section)
         return nil unless section.hidden_count > 0

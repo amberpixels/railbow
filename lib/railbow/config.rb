@@ -13,7 +13,7 @@ module Railbow
           "Status" => {"up" => "↑↑", "down" => "↓↓"}
         }
       },
-      "since" => "70d",
+      "since" => "90d",
       "since_min" => 10,
       "git" => "author:all,diff,mask:auto",
       "author_format" => "short",

@@ -104,7 +104,7 @@ Out of the box you get:
 - **Landing dates** - `⤻ Mar 04` badge when a migration was merged to main after its creation
 - **Branch badges** - `⎇ PS-142` showing the source branch/ticket
 - **Affected tables** - color-coded table names extracted from migration files
-- **Time filtering** - only the last 70 days shown by default (`since: 70d`), as a soft limit: never fewer than 10 migrations, however old (`since_min: 10`)
+- **Time filtering** - only the last 90 days shown by default (`since: 90d`), as a soft limit: never fewer than 10 migrations, however old (`since_min: 10`)
 - **Your migrations highlighted** - rows authored by you are visually distinct
 - **Pending migrations greyed out** - a `down` row keeps its status glyph but loses its colors
 
@@ -197,7 +197,7 @@ rather than an empty table, which is what keeps the `cache`, `queue` and
 
 ```
 ⋯ cache · 5 migrations, all applied · latest Feb 12 2024
-⋯ queue · 12 migrations, 3 pending outside the 70d window - RBW_SINCE=all
+⋯ queue · 12 migrations, 3 pending outside the 90d window - RBW_SINCE=all
 ```
 
 Databases that share a `migrations_paths` (horizontal sharding) run the same
@@ -280,7 +280,7 @@ rake railbow:init
 ### Example `.railbow.yml`
 
 ```yaml
-since: 70d
+since: 90d
 since_min: 10
 date: rel
 git: "author:me,diff,mask:auto"
@@ -307,7 +307,7 @@ Every option can also be set via `RBW_*` environment variables, which override c
 |---|---|---|
 | `RBW_PLAIN` | `1` | Disable all formatting |
 | `RBW_FORCE` | `1` | Force formatting even when piped, in CI, or run by an LLM agent (`RBW_PLAIN=1` still wins) |
-| `RBW_SINCE` | `2mo`, `70d`, `1y`, `all` | Filter migrations by time period |
+| `RBW_SINCE` | `2mo`, `90d`, `1y`, `all` | Filter migrations by time period |
 | `RBW_SINCE_MIN` | `10`, `0` | Never show fewer than this many migrations, however old (default 10; `0` disables) |
 | `RBW_DATE` | `full`, `rel`, `short`, `custom(%b %d)` | Date display format |
 | `RBW_TZ` | `local` (default), `utc`, `America/New_York` | Timezone dates are shown in. Migration IDs are UTC; this picks the clock they are displayed on |

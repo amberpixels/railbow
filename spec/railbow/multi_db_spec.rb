@@ -179,7 +179,7 @@ RSpec.describe "multi-database db:migrate:status" do
         statuses: [["up", "20200101000001", "Create Solid Cache"]])
     end
 
-    before { allow(Railbow::Params).to receive(:since).and_return("70d") }
+    before { allow(Railbow::Params).to receive(:since).and_return("90d") }
 
     it "collapses to a single line instead of an empty table" do
       output = run([primary, quiet])
@@ -192,7 +192,7 @@ RSpec.describe "multi-database db:migrate:status" do
       pending_outside = pool_double(name: "cache", path: "db/cache_migrate",
         statuses: [["down", "20200101000001", "Create Solid Cache"]])
 
-      expect(run([primary, pending_outside])).to include("1 pending outside the 70d window")
+      expect(run([primary, pending_outside])).to include("1 pending outside the 90d window")
     end
 
     it "renders the full table when RBW_DB=full" do
@@ -315,7 +315,7 @@ RSpec.describe "multi-database db:migrate:status" do
     # merged table rather than in a summary line below it.
     it "keeps a stale database in the merged table under RBW_DB=full" do
       allow(Railbow::Params).to receive(:db_full?).and_return(true)
-      allow(Railbow::Params).to receive(:since).and_return("70d")
+      allow(Railbow::Params).to receive(:since).and_return("90d")
       allow(Railbow::Params).to receive(:since_min).and_return(10)
 
       recent = pool_double(name: "primary",
