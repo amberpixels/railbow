@@ -19,7 +19,7 @@
 - **Routes** - color-coded HTTP verbs and highlighted parameters in `rails routes`
 - **Stats** - beautiful `rails stats` tables
 - **Notes** - `rails notes` with git blame, author colors, date filtering, and sorting
-- **About** - polished `rails about` output
+- **About** - `rails about` with the environment color-coded (production in red) and the schema version shown as a date and age
 - **Git Integration** - authors, diffs, branch origin, landing dates, uncommitted file indicators
 - **Calendar View** - month separators plus week ticks or full week rows, with optional per-section counts
 - **Multiple Databases** - read one table by default, the rest summarized in a line each (and expanded when they have migrations pending); sharded databases merged with a status per shard
@@ -296,6 +296,7 @@ Every option can also be set via `RBW_*` environment variables, which override c
 | `RBW_SINCE` | `2mo`, `70d`, `1y`, `all` | Filter migrations by time period |
 | `RBW_SINCE_MIN` | `10`, `0` | Never show fewer than this many migrations, however old (default 10; `0` disables) |
 | `RBW_DATE` | `full`, `rel`, `short`, `custom(%b %d)` | Date display format |
+| `RBW_TZ` | `local` (default), `utc`, `America/New_York` | Timezone dates are shown in. Migration IDs are UTC; this picks the clock they are displayed on |
 | `RBW_GIT` | `author:me,diff,mask:auto` | Git integration options |
 | `RBW_VIEW` | `calendar,tables` | Enable calendar view and table detection |
 | `RBW_CALENDAR` | `wticks`, `wdividers,counts`, `` (empty) | Week markers: tick marks, full week separator rows, per-section counts. Empty means month separators only |
@@ -344,6 +345,11 @@ Formatting auto-disables when:
 formatted output to a file, or letting an agent inspect the real rendering).
 An explicit `RBW_PLAIN=1` always wins over `RBW_FORCE`.
 
+If railbow itself hits an error while rendering, the command still works: it
+prints a one-line `railbow:` warning to stderr naming the error, then shows the
+stock Rails output and stays plain for the rest of the run. Migrations are never
+re-run by this; only their output falls back.
+
 ## Requirements
 
 - Ruby >= 3.1.0
@@ -356,6 +362,10 @@ bin/setup          # Install dependencies
 bundle exec rake   # Run tests + linting (RSpec + Standard)
 bin/console        # Interactive prompt
 ```
+
+To see a change in a real app (one that loads this checkout), set `RBW_APP` to
+its path, then `just shot "rails routes"` saves a PNG and
+`just cast "rails routes" 100` a scrolling GIF at 100 columns, in `tmp/shots/`.
 
 ## Contributing
 

@@ -62,12 +62,22 @@ module Railbow
         return
       end
 
-      strip_format = Railbow::Params.compact_strip_format?
-      prepared = routes.map { |r| prepare_route(r, strip_format) }
-      prepared = filter_by_verb(prepared)
+      # A failure drops whatever this section already buffered, then renders
+      # it the Rails way, header included since railbow normally hides it.
+      mark = @buffer.size
+      plain = lambda do
+        @buffer.slice!(mark..)
+        header(routes)
+        super
+      end
+      Railbow.guard(plain) do
+        strip_format = Railbow::Params.compact_strip_format?
+        prepared = routes.map { |r| prepare_route(r, strip_format) }
+        prepared = filter_by_verb(prepared)
 
-      groups = group_routes(prepared)
-      groups.each { |label, group| render_group(label, group) }
+        groups = group_routes(prepared)
+        groups.each { |label, group| render_group(label, group) }
+      end
     end
 
     private
@@ -97,7 +107,9 @@ module Railbow
         Table::Column.new(label: "Verb", sticky: true),
         Table::Column.new(label: "URI Pattern", sticky: true),
         Table::Column.new(label: "Controller#Action"),
-        Table::Column.new(label: "Prefix")
+        # The route name is the least of the four, so a group too wide for the
+        # terminal gives it up rather than wrapping past the edge.
+        Table::Column.new(label: "Prefix", droppable: 1)
       ]
 
       rows = routes.map { |r|

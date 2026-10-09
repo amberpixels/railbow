@@ -11,6 +11,18 @@ require "fileutils"
 #
 # Include into an example group; the helpers need the example's own `allow`.
 module StatusFixture
+  # Rails' own DatabaseTasks#migrate_status, for stand-ins to include beneath
+  # Railbow::MigrateStatusFormatter: railbow runs it first, for its fallback.
+  module StockMigrateStatus
+    def migrate_status
+      puts "\ndatabase: #{migration_connection_pool.db_config.database}\n\n"
+      migration_connection_pool.migration_context.migrations_status.each do |status, version, name|
+        puts "#{status.center(8)}  #{version.ljust(14)}  #{name}"
+      end
+      puts
+    end
+  end
+
   DEV_NAME = "Test Dev"
   DEV_EMAIL = "dev@example.test"
   OTHER_NAME = "Other Dev"

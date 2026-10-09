@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "zlib"
+require_relative "../clock"
 require_relative "../text_utils"
 
 module Railbow
@@ -170,16 +171,8 @@ module Railbow
 
       def format_date(timestamp, mode = "full")
         ts = timestamp.to_s
-        return ts if ts.length != 14
-
-        time = begin
-          Time.new(
-            ts[0..3].to_i, ts[4..5].to_i, ts[6..7].to_i,
-            ts[8..9].to_i, ts[10..11].to_i, ts[12..13].to_i
-          )
-        rescue ArgumentError
-          return ts
-        end
+        time = Railbow::Clock.from_version(ts)
+        return ts unless time
 
         case mode
         when "full"
@@ -194,8 +187,6 @@ module Railbow
           time.strftime("%Y-%m-%d %H:%M:%S")
         end
       end
-
-      private
 
       def format_relative_time_from(time)
         diff = Time.now - time
@@ -217,8 +208,6 @@ module Railbow
         else "~#{years}y ago"
         end
       end
-
-      public
     end
   end
 end

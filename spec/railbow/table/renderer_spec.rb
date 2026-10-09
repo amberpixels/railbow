@@ -460,6 +460,44 @@ RSpec.describe Railbow::Table::Renderer do
     end
   end
 
+  describe "a last column with no room left" do
+    let(:columns) do
+      [
+        Railbow::Table::Column.new(label: "Verb"),
+        Railbow::Table::Column.new(label: "Path"),
+        Railbow::Table::Column.new(label: "Name")
+      ]
+    end
+
+    it "keeps the value on its row instead of wrapping past the terminal edge" do
+      rows = [["GET", "/" + "a" * 40, "apples_bananas_cherries"]]
+      renderer = described_class.new(columns: columns, theme: Railbow::Table::Themes::PLAIN, term_width: 50)
+      lines = strip_ansi(renderer.render(rows)).split("\n")
+
+      expect(lines.size).to eq(2) # header and the one row
+      expect(lines[1]).to end_with("apples_bananas_cherries")
+    end
+
+    it "keeps the value on its row when a piece is too long to wrap into the room" do
+      # 12 columns of room, but "representation_" cannot be broken below 15.
+      rows = [["GET", "/" + "a" * 30, "blob_representation_proxy"]]
+      renderer = described_class.new(columns: columns, theme: Railbow::Table::Themes::PLAIN, term_width: 50)
+      lines = strip_ansi(renderer.render(rows)).split("\n")
+
+      expect(lines.size).to eq(2)
+      expect(lines[1]).to end_with("blob_representation_proxy")
+    end
+
+    it "still wraps when the last column has room" do
+      rows = [["GET", "/a", "apples bananas cherries"]]
+      renderer = described_class.new(columns: columns, theme: Railbow::Table::Themes::PLAIN, term_width: 25)
+      lines = strip_ansi(renderer.render(rows)).split("\n")
+
+      expect(lines.size).to be > 2
+      expect(lines.drop(1)).to all(satisfy { |l| l.length <= 25 })
+    end
+  end
+
   describe "ANSI-colored content" do
     it "correctly measures width ignoring ANSI codes" do
       columns = [

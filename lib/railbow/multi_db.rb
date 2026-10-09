@@ -51,9 +51,23 @@ module Railbow
       def flush
         return if empty?
 
-        Railbow::Status::Printer.new(@sections, skipped: @skipped).print
+        if Railbow.plain?
+          print_fallback
+        else
+          Railbow.guard(-> { print_fallback }) do
+            Railbow::Status::Printer.new(@sections, skipped: @skipped).print
+          end
+        end
         @sections = []
         @skipped = []
+      end
+
+      private
+
+      # The stock Rails tables captured per database while their pools were
+      # still open; see MigrateStatusFormatter#migrate_status.
+      def print_fallback
+        @sections.each { |section| $stdout.write(section.fallback_output.to_s) }
       end
     end
 

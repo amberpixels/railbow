@@ -33,6 +33,12 @@ module Railbow
                                      short      - Jan 30 (column: Date)
                                      custom(…)  - user strftime, e.g. custom(%b %d, %Y)
 
+            RBW_TZ=<zone>            Timezone dates are shown in (default: local):
+                                     local      - this machine's timezone
+                                     utc        - UTC, the digits of the Migration ID
+                                     <name>     - any zone Rails knows, e.g.
+                                                  America/New_York
+
             RBW_VIEW=<options>       Display options (comma-separated):
                                      calendar   - show month/year separator lines + week ticks
                                      tables     - parse migration files, show Tables column

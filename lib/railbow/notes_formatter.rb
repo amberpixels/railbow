@@ -2,6 +2,7 @@
 
 require "zlib"
 require "date"
+require_relative "clock"
 require_relative "git_utils"
 require_relative "formatters/base"
 require_relative "logo"
@@ -33,6 +34,12 @@ module Railbow
     def display(results, options = {})
       return super if Railbow.plain?
 
+      Railbow.guard(-> { super }) { railbow_display(results, options) }
+    end
+
+    private
+
+    def railbow_display(results, options = {})
       if Railbow::Params.help?
         print_help
         return
@@ -198,8 +205,6 @@ module Railbow
       puts
     end
 
-    private
-
     def blame_file(path)
       return {} unless File.exist?(path)
 
@@ -228,7 +233,7 @@ module Railbow
           current_time = line.sub("author-time ", "").to_i
         elsif line.start_with?("\t") && current_line
           # End of this blame entry — store it
-          date = current_time ? Time.at(current_time).to_date : nil
+          date = current_time ? Railbow::Clock.in_zone(Time.at(current_time)).to_date : nil
           result[current_line] = {
             author: current_author,
             email: current_email,

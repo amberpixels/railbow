@@ -9,6 +9,12 @@ module Railbow
     def to_s
       return super if Railbow.plain?
 
+      Railbow.guard(-> { super }) { railbow_to_s }
+    end
+
+    private
+
+    def railbow_to_s
       formatter = Formatters::Base.new
 
       columns = [

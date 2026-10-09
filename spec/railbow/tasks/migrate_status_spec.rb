@@ -17,6 +17,7 @@ RSpec.describe Railbow::MigrateStatusFormatter do
 
   let(:helper_class) do
     Class.new do
+      include StatusFixture::StockMigrateStatus
       include Railbow::MigrateStatusFormatter
 
       attr_accessor :migration_connection_pool

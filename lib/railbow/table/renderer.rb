@@ -260,17 +260,23 @@ module Railbow
 
         last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost, dim: dim, accent: columns[last].accent)
 
-        if last_col_max && display_width(strip_ansi(last_cell_raw)) > last_col_max
-          blank_prefix = prefix_parts.map { |part|
-            " " * display_width(strip_ansi(part))
-          }.join(sep)
+        whole = "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
+        return whole unless last_col_max && display_width(strip_ansi(last_cell_raw)) > last_col_max
 
-          wrapped = ansi_word_wrap(last_cell_raw, last_col_max)
-          "#{prefix}#{sep}#{pad}#{wrapped.first}#{RESET}#{pad}\n" +
-            wrapped[1..].map { |line| "#{blank_prefix}#{sep}#{pad}#{line}#{RESET}#{pad}" }.join("\n")
-        else
-          "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
-        end
+        # Wrapping only helps when every line fits beside the fixed columns.
+        # With no room left, or a piece the wrapper cannot break small enough,
+        # each continuation line would be padded past the edge and the terminal
+        # would wrap it again, leaving a blank line before every fragment. The
+        # value goes on the row whole instead.
+        room = term_w - prefix_width - display_width(pad)
+        wrapped = ansi_word_wrap(last_cell_raw, last_col_max)
+        return whole unless wrapped.all? { |line| display_width(strip_ansi(line)) <= room }
+
+        blank_prefix = prefix_parts.map { |part|
+          " " * display_width(strip_ansi(part))
+        }.join(sep)
+        "#{prefix}#{sep}#{pad}#{wrapped.first}#{RESET}#{pad}\n" +
+          wrapped[1..].map { |line| "#{blank_prefix}#{sep}#{pad}#{line}#{RESET}#{pad}" }.join("\n")
       end
 
       def style_cell(content, highlight: false, ghost: false, dim: false, accent: false)

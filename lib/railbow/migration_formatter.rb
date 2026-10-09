@@ -10,6 +10,49 @@ module Railbow
     def announce(message)
       return super if Railbow.plain?
 
+      Railbow.guard(-> { super }) { railbow_announce(message) }
+    end
+
+    # The yield runs the migration itself, so it stays outside the guard: a
+    # failing migration must raise as usual, and a formatting error must not
+    # re-run it through super. The fallback prints what Rails would have.
+    def say_with_time(message)
+      return super { yield } if Railbow.plain?
+
+      f = FORMATTER
+      result = nil
+      time = Benchmark.measure { result = yield }
+
+      plain = lambda do
+        say(message)
+        say("%.4fs" % time.real, :subitem)
+        say("#{result} rows", :subitem) if result.is_a?(Integer)
+      end
+      Railbow.guard(plain) do
+        timing = f.format_timing(time.real)
+        write "  #{f.green(f.emoji(:check))} #{message} → #{timing}"
+        say("#{result} rows", :subitem) if result.is_a?(Integer)
+      end
+
+      result
+    end
+
+    def say(message, subitem = false)
+      return super if Railbow.plain?
+
+      prefix = subitem ? "     " : "  "
+      write("#{prefix}#{message}")
+    end
+
+    def write(text = "")
+      return super if Railbow.plain?
+
+      puts text
+    end
+
+    private
+
+    def railbow_announce(message)
       f = FORMATTER
       migration_name = self.class.name&.demodulize || "Migration"
 
@@ -32,33 +75,6 @@ module Railbow
 
       write ""
       write line
-    end
-
-    def say_with_time(message)
-      return super { yield } if Railbow.plain?
-
-      f = FORMATTER
-      result = nil
-      time = Benchmark.measure { result = yield }
-
-      timing = f.format_timing(time.real)
-      write "  #{f.green(f.emoji(:check))} #{message} → #{timing}"
-      say("#{result} rows", :subitem) if result.is_a?(Integer)
-
-      result
-    end
-
-    def say(message, subitem = false)
-      return super if Railbow.plain?
-
-      prefix = subitem ? "     " : "  "
-      write("#{prefix}#{message}")
-    end
-
-    def write(text = "")
-      return super if Railbow.plain?
-
-      puts text
     end
   end
 end

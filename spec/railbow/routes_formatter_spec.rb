@@ -84,6 +84,39 @@ RSpec.describe Railbow::RoutesFormatter do
     str.to_s.gsub(/\e\[[0-9;]*m/, "")
   end
 
+  describe "a group too wide for the terminal" do
+    before do
+      allow($stdout).to receive(:tty?).and_return(true)
+      allow($stdout).to receive(:winsize).and_return([40, 100])
+    end
+
+    let(:redirects) do
+      [
+        {name: "dev_orchards_apples_pruning_schedule", verb: "GET",
+         path: "/dev/orchards/apples/pruning_schedule(.:format)",
+         reqs: "redirect(301, /dev/orchards/apple_pruning_plans)"},
+        {name: "banana_settings", verb: "GET", path: "/banana_settings(.:format)",
+         reqs: "redirect(301, /banana_prefs)"}
+      ]
+    end
+
+    it "drops the Prefix column so every row fits" do
+      formatter.section(redirects)
+      lines = strip_ansi(formatter.result).split("\n").reject(&:empty?)
+
+      expect(lines.join).not_to include("Prefix")
+      expect(lines.join).not_to include("dev_orchards_apples_pruning_schedule")
+      expect(lines).to all(satisfy { |l| l.length <= 100 })
+    end
+
+    it "keeps the Prefix column when the terminal is wide enough" do
+      allow($stdout).to receive(:winsize).and_return([40, 160])
+      formatter.section(redirects)
+
+      expect(strip_ansi(formatter.result)).to include("dev_orchards_apples_pruning_schedule")
+    end
+  end
+
   describe "default grouping by controller" do
     before { allow($stdout).to receive(:tty?).and_return(true) }
 
@@ -415,6 +448,17 @@ RSpec.describe Railbow::RoutesFormatter do
       formatter.section(sample_routes)
       result = formatter.result
       expect(result).not_to include("\e[")
+    end
+
+    it "falls back to Rails output, header included, when rendering fails" do
+      allow($stdout).to receive(:tty?).and_return(true)
+      allow(formatter).to receive(:render_group).and_raise(NoMethodError, "boom")
+
+      expect { formatter.section(sample_routes) }.to output(/boom/).to_stderr
+      result = formatter.result
+      expect(result).not_to include("\e[")
+      expect(result).to include("Prefix")
+      expect(result).to include("users#index")
     end
   end
 end

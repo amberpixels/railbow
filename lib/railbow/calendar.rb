@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "date"
+require_relative "clock"
 
 module Railbow
   # Turns an ordered list of migration versions into the calendar furniture that
@@ -58,10 +59,7 @@ module Railbow
     end
 
     def parse_date(version)
-      v = version.to_s
-      Date.new(v[0..3].to_i, v[4..5].to_i, v[6..7].to_i)
-    rescue Date::Error
-      nil
+      Railbow::Clock.from_version(version)&.to_date
     end
 
     def month_key(date)

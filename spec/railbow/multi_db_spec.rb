@@ -25,6 +25,8 @@ RSpec.describe "multi-database db:migrate:status" do
           yield pool
         end
       end
+
+      include StatusFixture::StockMigrateStatus
     end
   end
 
@@ -395,6 +397,39 @@ RSpec.describe "multi-database db:migrate:status" do
 
       output = run([primary, secondary])
       expect(output.scan("Enhanced db:migrate:status").size).to eq(1)
+    end
+  end
+
+  describe "a failure inside railbow" do
+    it "prints the stock Rails tables when rendering the batch fails" do
+      allow(Railbow::Status::Printer).to receive(:new).and_raise(NoMethodError, "boom")
+
+      output = nil
+      expect { output = run([primary, secondary]) }.to output(/boom/).to_stderr
+      expect(output).to include("database: primary-dev")
+      expect(output).to include("database: log-dev")
+      expect(output).to include("Add Apples")
+      expect(output).to include("Add Bananas")
+      expect(output).not_to include("\e[")
+    end
+
+    it "lets an error from Rails itself raise untouched, without blaming railbow" do
+      down = pool_double(name: "primary", statuses: [])
+      allow(down.migration_context).to receive(:migrations_status).and_raise(IOError, "database is down")
+
+      expect {
+        expect { run([down]) }.to raise_error(IOError, "database is down")
+      }.not_to output.to_stderr
+      expect(Railbow.failure).to be_nil
+    end
+
+    it "falls back to Rails for a database railbow cannot read" do
+      allow(Railbow::Status::Section).to receive(:new).and_raise(NoMethodError, "boom")
+
+      output = nil
+      expect { output = run([primary]) }.to output(/boom/).to_stderr
+      expect(output).to include("database: primary-dev")
+      expect(output).to include("Add Apples")
     end
   end
 end

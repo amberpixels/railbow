@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `RBW_TZ` (or `tz:` in `.railbow.yml`) picks the timezone railbow shows
+  dates in: `local` (the default), `utc`, or any zone Rails knows, such as
+  `America/New_York`. It covers the `db:migrate:status` date column, calendar
+  separators and landed badges, `rails notes` blame dates, the `rails about`
+  schema version, and where `RBW_SINCE` windows start.
+- A railbow bug no longer breaks the command it decorates. If rendering
+  raises, railbow prints a one-line `railbow:` warning to stderr and falls back
+  to the stock Rails output for `rails about`, `rails stats`, `rails notes`,
+  `rails routes`, migrations and `db:migrate:status` (including multi-database
+  runs), then stays plain for the rest of the process. A migration body is
+  never re-run by the fallback.
+
+### Changed
+
+- Dates in `db:migrate:status` (and calendar separators) are now shown in
+  local time. They used to repeat the UTC digits of the Migration ID, so on a
+  machine outside UTC the column shifts by the UTC offset. Set `tz: utc` (or
+  `RBW_TZ=utc`) for the previous display.
+- `rails about` now says something the stock output does not. The environment
+  is colored (production in bold red, development green, anything else
+  yellow), the database schema version shows its time and age, version
+  numbers share one accent color, the application root steps back, and list
+  values such as Middleware get a line per item. The Rails title line is kept,
+  and the old "Property / Value" header row is gone.
+
+### Fixed
+
+- `rails routes` no longer leaves a blank line before every piece of a wrapped
+  route name when the other columns nearly fill the terminal. A group too wide
+  for the terminal drops its Prefix column, and a table never wraps its last
+  column into lines that would run past the edge: the value stays on its row.
+- `RBW_DATE=rel` ages are no longer off by the machine's UTC offset.
+  Migration IDs are UTC timestamps but were read as local time.
+- `rails about` no longer crashes with `uninitialized class variable
+  @@properties in Railbow::AboutFormatter`.
+
 ## [0.6.2] - 2026-09-21
 
 ### Changed

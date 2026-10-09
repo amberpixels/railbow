@@ -42,6 +42,10 @@ module Railbow
       attr_reader :databases, :migrations_key, :state, :hidden_count, :total_count,
         :since_value, :entries, :ghosts
 
+      # What stock Rails prints for the databases in this section, shown if
+      # railbow fails to render it.
+      attr_accessor :fallback_output
+
       # True when the time window left too few rows and the floor topped the
       # section back up, which is worth saying out loud: the table then shows
       # migrations from outside the window it advertises.
@@ -92,6 +96,7 @@ module Railbow
           mine[:statuses].merge!(entry[:statuses])
         end
         @databases.concat(other.databases)
+        @fallback_output = [fallback_output, other.fallback_output].compact.join
         @ghosts = other.ghosts.merge(@ghosts)
         @total_count = [@total_count, other.total_count].max
         @hidden_count = [@hidden_count, other.hidden_count].max
@@ -235,7 +240,7 @@ module Railbow
           return db_list
         end
 
-        cutoff_version = since_cutoff.strftime("%Y%m%d%H%M%S").to_i
+        cutoff_version = Railbow::Clock.version_at(since_cutoff).to_i
         @window_count = db_list.count { |_, v, _| v.to_i >= cutoff_version }
 
         # Not Comparable#clamp: the floor can exceed the total, and clamp
@@ -553,10 +558,7 @@ module Railbow
       end
 
       def version_date(version)
-        v = version.to_s
-        Date.new(v[0..3].to_i, v[4..5].to_i, v[6..7].to_i)
-      rescue Date::Error
-        nil
+        Railbow::Clock.from_version(version)&.to_date
       end
     end
   end

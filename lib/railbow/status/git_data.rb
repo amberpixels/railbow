@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "date"
+require "time"
+require_relative "../clock"
 require_relative "../git_utils"
 require_relative "../multi_db"
 require_relative "../params"
@@ -137,8 +139,8 @@ module Railbow
           line = line.strip
           if line.start_with?("COMMIT:")
             current_date = begin
-              Date.parse(line.sub("COMMIT:", ""))
-            rescue Date::Error
+              Railbow::Clock.in_zone(Time.iso8601(line.sub("COMMIT:", ""))).to_date
+            rescue ArgumentError
               nil
             end
           elsif !line.empty? && current_date

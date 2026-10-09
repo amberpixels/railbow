@@ -23,6 +23,7 @@ RSpec.describe "db:migrate:status golden output" do
 
   subject(:helper) do
     Class.new do
+      include StatusFixture::StockMigrateStatus
       include Railbow::MigrateStatusFormatter
 
       attr_accessor :migration_connection_pool

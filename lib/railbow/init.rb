@@ -60,6 +60,10 @@ module Railbow
       # Date format: full, rel, short, or custom(%b %d, %Y)
       # date: "full"
 
+      # Timezone dates are shown in: local (this machine), utc, or any zone
+      # Rails knows, e.g. America/New_York or "Eastern Time (US & Canada)"
+      # tz: "local"
+
       # Multi-database runs (comma-separated). Leave empty ("") to expand every
       # database into its own section, in database.yml order; a database with
       # nothing in the time window collapses to a one-line summary either way.

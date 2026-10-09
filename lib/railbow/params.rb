@@ -2,6 +2,7 @@
 
 require "date"
 require_relative "calendar"
+require_relative "clock"
 require_relative "config"
 require_relative "name_formatter"
 require_relative "name_collision_resolver"
@@ -54,11 +55,12 @@ module Railbow
       amount = match[1].to_i
       unit = match[2].downcase
 
+      today = Clock.today
       case unit
-      when "d" then Date.today - amount
-      when "w" then Date.today - (amount * 7)
-      when "mo", "m" then Date.today.prev_month(amount)
-      when "y" then Date.today.prev_year(amount)
+      when "d" then today - amount
+      when "w" then today - (amount * 7)
+      when "mo", "m" then today.prev_month(amount)
+      when "y" then today.prev_year(amount)
       end
     end
 
@@ -204,6 +206,15 @@ module Railbow
     def date_format
       val = ENV["RBW_DATE"] || Config.load["date"]
       return "full" if val.nil? || val.to_s.strip.empty?
+
+      val.to_s.strip
+    end
+
+    # --- RBW_TZ ---
+
+    def tz
+      val = ENV["RBW_TZ"] || Config.load["tz"]
+      return "local" if val.nil? || val.to_s.strip.empty?
 
       val.to_s.strip
     end
