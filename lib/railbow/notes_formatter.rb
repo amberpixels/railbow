@@ -52,7 +52,6 @@ module Railbow
       since_date = Railbow::Params.parse_since(since_val, context: "annotations")
       git_needed = %w[all me].include?(author_mode) || since_date || sort_mode == "date"
 
-      # Build blame cache for all files if git features are needed
       blame_cache = {}
       if git_needed
         results.each_key do |source_file|
@@ -60,7 +59,7 @@ module Railbow
         end
       end
 
-      # Flatten annotations into a list for filtering/sorting
+      # Flattened so filtering and sorting can cross file boundaries
       entries = []
       results.each do |source_file, annotations|
         annotations.each do |annotation|
@@ -73,7 +72,6 @@ module Railbow
         end
       end
 
-      # Filter by SINCE
       skipped = 0
       if since_date
         before = entries.size
@@ -83,7 +81,7 @@ module Railbow
         skipped = before - entries.size
       end
 
-      # Sort by date (newest first) when requested
+      # Newest first; entries with no blame date sink to the end
       if sort_mode == "date"
         entries.sort_by! do |entry|
           d = entry.dig(:blame, :date)
@@ -91,13 +89,12 @@ module Railbow
         end
       end
 
-      # Determine "me" identity
       git_email = nil
       if author_mode == "me"
         git_email = current_git_email
       end
 
-      # Determine max location width for alignment when showing metadata
+      # Locations pad to one width so the author and date line up
       show_date = git_needed
       max_loc_width = 0
       author_colors = nil
@@ -114,11 +111,10 @@ module Railbow
         end
       end
 
-      # Group entries back by file for bar coloring
+      # A file with several notes gets its own bar color; a lone note's bar is dim
       file_counts = Hash.new(0)
       entries.each { |e| file_counts[e[:file]] += 1 }
 
-      # Display
       entries.each do |entry|
         source_file = entry[:file]
         annotation = entry[:annotation]
@@ -134,7 +130,6 @@ module Railbow
           DIM
         end
         colored_bar = "#{bar_color}#{BAR}#{RESET}"
-        # When highlighting "me", use bright white bar
         colored_bar = "#{WHITE}#{BAR}#{RESET}" if is_mine
 
         tag = annotation.tag
@@ -143,7 +138,6 @@ module Railbow
         colored_tag = "#{tag_color}#{BOLD}#{tag}#{RESET}"
         note = annotation.text.to_s.encode("UTF-8", invalid: :replace, undef: :replace)
 
-        # Build the file:line row with optional author+date
         loc_line = " #{colored_bar} #{location}"
 
         if author_mode == "all" && blame_info
@@ -171,7 +165,6 @@ module Railbow
         indent_width = 1 + 1 + 1 + 3 + tag.length + 1 # " " + BAR + " " + "   " + TAG + " "
         continuation_prefix = " #{colored_bar}   #{" " * (tag.length + 1)}"
 
-        # Apply "me" highlighting to note text
         if is_mine
           tag_str = "#{WHITE}#{tag}#{RESET} "
         end
@@ -232,7 +225,7 @@ module Railbow
         elsif line.start_with?("author-time ")
           current_time = line.sub("author-time ", "").to_i
         elsif line.start_with?("\t") && current_line
-          # End of this blame entry — store it
+          # The tab-prefixed source line closes a porcelain blame entry
           date = current_time ? Railbow::Clock.in_zone(Time.at(current_time)).to_date : nil
           result[current_line] = {
             author: current_author,

@@ -4,7 +4,6 @@ require "active_support/inflector"
 
 module Railbow
   class MigrationParser
-    # Methods that take a single table name as the first argument
     SINGLE_TABLE_METHODS = %w[
       create_table drop_table change_table
       add_column remove_column rename_column change_column
@@ -15,7 +14,6 @@ module Railbow
       add_timestamps remove_timestamps
     ].freeze
 
-    # Methods that take two table names as arguments
     DUAL_TABLE_METHODS = %w[
       add_foreign_key remove_foreign_key
     ].freeze
@@ -25,7 +23,6 @@ module Railbow
     SINGLE_TABLE_PATTERN = /\b(?:#{(SINGLE_TABLE_METHODS + DUAL_TABLE_METHODS).join("|")})\s+[:"](\w+)/
     DUAL_TABLE_PATTERN = /\b(?:#{DUAL_TABLE_METHODS.join("|")})\s+[:"](\w+)["\s,]+[:"](\w+)/
 
-    # SQL keywords followed by a table name
     SQL_TABLE_PATTERNS = [
       /\bUPDATE\s+["']?(\w+)["']?/i,
       /\bINSERT\s+INTO\s+["']?(\w+)["']?/i,
@@ -36,21 +33,19 @@ module Railbow
       /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i
     ].freeze
 
-    # Helper/DSL calls that name their target table via a keyword argument, e.g.
-    # `convert_to_monthly_partitions(table: :apples)` or
-    # `remove_foreign_key :accounts, to_table: :owners`. Catches project-level
-    # migration helpers regardless of the method name. Bare `from:`/`to:` are
-    # deliberately not matched — `change_column_default :users, :status,
+    # A table named by keyword argument, which catches project-level helpers
+    # such as `convert_to_monthly_partitions(table: :apples)` whatever their
+    # name. Not bare `from:`/`to:`: `change_column_default :users, :status,
     # from: nil, to: "active"` would yield phantom tables.
     KEYWORD_TABLE_PATTERN = /\b(?:table|to_table|from_table):\s*[:"']?(\w+)/
 
     # Ruby `#` comments up to end of line, but not `#{}` interpolation.
     COMMENT_PATTERN = /#(?!\{).*/
 
-    # AR class-level query/mutation methods that strongly signal a constant is a model.
-    # Kept narrow on purpose — methods like `find`, `all`, `first`, `count`, `create`,
-    # `new`, `transaction`, `order`, `includes` collide with stdlib/non-model constants
-    # (e.g. Time.new, File.find, Array#first) and would produce false positives.
+    # AR class methods that strongly signal a constant is a model. Kept narrow:
+    # `find`, `all`, `first`, `count`, `create`, `new`, `transaction`, `order`,
+    # `includes` also exist on non-model constants (Time.new, File.find) and
+    # would produce false positives.
     MODEL_AR_METHODS = %w[
       find_each find_in_batches
       find_by find_by!
@@ -74,9 +69,8 @@ module Railbow
     def self.extract_tables_from_content(content)
       return [] if content.nil? || content.empty?
 
-      # Comments would otherwise produce phantom tables — an explanatory
-      # "# ALTER TABLE foo ..." or a commented-out create_table reads exactly
-      # like the real thing to the patterns below.
+      # An explanatory "# ALTER TABLE foo ..." or a commented-out create_table
+      # reads exactly like the real thing to the patterns below.
       content = content.gsub(COMMENT_PATTERN, "")
 
       tables = []
@@ -89,10 +83,9 @@ module Railbow
       content.scan(KEYWORD_TABLE_PATTERN) { |match| tables << match[0] }
       tables.uniq!
 
-      # Model-based detection is heuristic (a constant that happens to respond
-      # to one of these methods isn't necessarily an AR model). Only use it to
-      # supplement sparse DDL/SQL findings — skip once we already know of ≥2
-      # tables, and cap the final total at 2.
+      # Model references are a guess (a constant answering these methods need
+      # not be a model), so they only fill in when DDL and SQL found fewer
+      # than 2 tables, and never take the total past 2.
       if tables.size < 2
         content.scan(MODEL_REFERENCE_PATTERN) do |match|
           break if tables.size >= 2

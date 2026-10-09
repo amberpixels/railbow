@@ -4,12 +4,10 @@ require "stringio"
 require "tmpdir"
 require "fileutils"
 
-# Builds a deterministic db:migrate:status render: real migration files on disk
-# (so table extraction runs for real) and a git stub that answers every command
-# migrate_status issues. Used by the golden spec that guards the multi-database
-# refactor - the render it produces must survive the extraction byte for byte.
-#
-# Include into an example group; the helpers need the example's own `allow`.
+# A deterministic db:migrate:status render for the golden spec: real migration
+# files on disk (so table extraction runs for real) and a git stub answering
+# every command migrate_status issues. Include into an example group; the
+# helpers need the example's own `allow`.
 module StatusFixture
   # Rails' own DatabaseTasks#migrate_status, for stand-ins to include beneath
   # Railbow::MigrateStatusFormatter: railbow runs it first, for its fallback.
@@ -137,10 +135,8 @@ module StatusFixture
     File.join(GOLDEN_DIR, name)
   end
 
-  # Renders must not depend on the machine running them. Without this, a
-  # developer with a ~/.config/railbow/config.yml gets different output than
-  # CI, and regenerating the golden fixture would bake their personal settings
-  # into the repository.
+  # Otherwise a ~/.config/railbow/config.yml changes the render, and
+  # regenerating the golden fixture would bake personal settings into the repo.
   def isolate_config
     allow(Railbow::Config).to receive(:config_files).and_return([])
     Railbow::Config.reset!

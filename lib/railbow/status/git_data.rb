@@ -9,13 +9,8 @@ require_relative "../params"
 
 module Railbow
   module Status
-    # Every git lookup db:migrate:status makes about a migrations directory:
-    # who wrote each migration, when it landed on the mainline, which branch
-    # introduced it, and what is still uncommitted.
-    #
-    # One instance per migrations directory. Multi-database runs reuse the
-    # instance across databases that share a directory, which is what keeps
-    # `git log` from running once per database.
+    # Every git lookup db:migrate:status makes about one migrations directory:
+    # authors, landing dates, originating branches and uncommitted files.
     class GitData
       EMPTY_AUTHORS = {names: {}, emails: {}}.freeze
 
@@ -39,10 +34,8 @@ module Railbow
         load_diff(branch_mask, base_override) if diff_enabled && migrate_dir
       end
 
-      # Shares one instance per migrations directory across a multi-database
-      # run. Databases that share a directory (shards) or a run that renders
-      # several databases would otherwise repeat the same full-history
-      # `git log` once per database.
+      # One instance per migrations directory across a multi-database run, so
+      # the full-history `git log` does not repeat once per database.
       def self.for(migrate_dir:, **opts)
         cache = Railbow::MultiDb.current&.git_cache
         return new(migrate_dir: migrate_dir, **opts) unless cache
@@ -244,11 +237,9 @@ module Railbow
         branches_out.each_line.map(&:strip).reject(&:empty?)
       end
 
-      # Picks the branch that originally introduced the commit.
-      # 1. Drop child branches: if A is an ancestor of B, the commit came from A.
-      # 2. Among the rest, prefer the branch with the most commits after the
-      #    adding commit - it has been active longest since, so it is the
-      #    original rather than a newer fork.
+      # Picks the branch that introduced the commit: child branches drop out
+      # (if A is an ancestor of B, the commit came from A), then the branch
+      # with the most commits since wins, as the original rather than a fork.
       def pick_origin_branch(branches, commit)
         return branches.first if branches.size == 1
 

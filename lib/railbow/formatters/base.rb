@@ -70,23 +70,20 @@ module Railbow
         table_names.map { |t| table_tag(t) }.join(" ")
       end
 
-      # Re-fits a pre-formatted table_tags string within max_width,
-      # showing full table names and "+N" for overflow.
-      # Accepts the full formatted string (with ANSI) and splits it into segments.
+      # Re-fits a formatted table_tags string within max_width: as many whole
+      # tags as fit plus "+N" for the rest, then one truncated tag, then "+N".
       def table_tags_fitted(formatted_str, max_width)
         return formatted_str if formatted_str.nil? || formatted_str.empty?
 
-        # Split into individual tag segments: each is "\e[38;5;NNNm● name\e[0m"
+        # Each tag is "\e[38;5;NNNm● name\e[0m"
         segments = formatted_str.scan(/\e\[38;5;\d+m● [^\e]+\e\[0m/)
         return formatted_str if segments.empty?
 
         total = segments.size
         plain_segments = segments.map { |s| strip_ansi(s) }
 
-        # Try fitting all tags
         return formatted_str if display_width(plain_segments.join(" ")) <= max_width
 
-        # Try fitting progressively fewer tags with +N suffix
         (total - 1).downto(1) do |count|
           remaining = total - count
           suffix = " +#{remaining}"
@@ -96,17 +93,13 @@ module Railbow
           end
         end
 
-        # Try fitting a truncated first table name + overflow.
-        # Need at least 7 chars: "● t… +N" (dot + color prefix use no visible width beyond the dot)
+        # A truncated first tag needs 7 columns at least: "● t… +N"
         if max_width >= 7
           suffix = (total > 1) ? " +#{total - 1}" : ""
-          # Available width for "● name…" part
           avail = max_width - display_width(suffix)
-          # "● " prefix = 2 chars visible, plus at least 1 char of name + ellipsis (1 char)
           if avail >= 4 # "● " (2) + at least 1 char + "…" (1)
             first_plain = plain_segments[0] # e.g. "● some_table"
             name_part = first_plain.sub(/^● /, "")
-            # Truncate name to fit: avail - 2 ("● ") - 1 ("…") = chars for name
             name_max = avail - 2 - 1
             truncated_name = name_part[0, name_max]
             color_match = segments[0].match(/\e\[38;5;\d+m/)
@@ -115,16 +108,13 @@ module Railbow
           end
         end
 
-        # Absolute fallback: just +N
         "+#{total}"
       end
 
-      # Re-fits a Migration Name cell whose tags (branch, landed) were padded
-      # flush against the right edge of a wider column. Truncating such a cell
-      # from the right eats the tags whole and leaves a bare ellipsis floating
-      # after the padding, so the name gives up the space instead and the tags
-      # stay put. Below NAME_TAGS_FLOOR there is no room for both and the tags
-      # are dropped outright - the name is what the row is about.
+      # Re-fits a Migration Name cell whose tags (branch, landed) sit flush
+      # right. Cutting from the right would eat the tags and leave a bare
+      # ellipsis, so the name gives up the space instead. Below NAME_TAGS_FLOOR
+      # the tags go: the name is what the row is about.
       def name_with_tags_fitted(cell, max_width)
         str = cell.to_s
         return truncate_ansi(str, max_width) if display_width(strip_ansi(str)) <= max_width

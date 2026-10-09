@@ -6,10 +6,9 @@ require_relative "../stats_formatter"
 # railtie initializer does not fire there: install from here as well.
 Railbow::StatsFormatter.install!
 
-# Rails 8.1 removed the `stats` rake task in favor of the `rails stats`
-# command. Re-define it so that `rake stats` keeps working. Gated on the
-# version, not task_defined?: railtie tasks load before Rails' own, so on older
-# Rails this task would run alongside the stock one.
+# Rails 8.1 dropped the `stats` rake task for the `rails stats` command; this
+# keeps `rake stats` working. Gated on the version, not task_defined?: railtie
+# tasks load before Rails' own, so on older Rails both would run.
 if Rails.gem_version >= Gem::Version.new("8.1")
   desc "Report code statistics (lines / LOC / classes / methods / M/C / LOC/M)"
   task stats: :environment do

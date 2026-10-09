@@ -11,10 +11,11 @@ module Railbow
   module Params
     module_function
 
-    # Parse compound ENV value: "author:me,diff,base:develop"
-    # → { "author" => "me", "diff" => true, "base" => "develop" }
-    # Repeated keys collect into arrays: "hide:date,hide:author"
-    # → { "hide" => ["date", "author"] }
+    # Parse a compound ENV value; repeated keys collect into arrays.
+    #   parse_compound("author:me,diff,base:develop")
+    #   # => { "author" => "me", "diff" => true, "base" => "develop" }
+    #   parse_compound("hide:date,hide:author")
+    #   # => { "hide" => ["date", "author"] }
     def parse_compound(value)
       return {} if value.nil? || value.strip.empty?
 
@@ -82,12 +83,9 @@ module Railbow
       (ENV["RBW_SINCE"] || Config.load["since"] || "all").strip.downcase
     end
 
-    # Floor on how many migrations survive the SINCE window. The window is a
-    # soft limit: when it leaves fewer rows than this, the oldest ones are
-    # pulled back in until the count is met. 0 disables the floor.
-    #
-    # Deliberately a knob of its own rather than a token inside RBW_SINCE, so
-    # an ad-hoc `RBW_SINCE=2mo` keeps the floor instead of silently dropping it.
+    # Floor on how many migrations survive the SINCE window: when it leaves
+    # fewer rows, the oldest are pulled back in. 0 disables the floor. A knob of
+    # its own, not a RBW_SINCE token, so an ad-hoc `RBW_SINCE=2mo` keeps it.
     def since_min
       value = ENV["RBW_SINCE_MIN"] || Config.load["since_min"] || 0
       [value.to_i, 0].max
@@ -163,15 +161,14 @@ module Railbow
       ENV["RBW_AUTHOR_FORMAT"] || Config.load["author_format"] || "short"
     end
 
-    # Format an author name using NameFormatter.
-    # Accepts preset names ("initials", "first_name", etc.) or
-    # custom patterns ("FF L", "FFFF L.", "LLLL, FFFF").
+    # author_format is a preset ("initials", "first_name", ...) or a custom
+    # pattern ("FF L", "FFFF L.", "LLLL, FFFF").
     def format_author(name)
       NameFormatter.format(name, author_format)
     end
 
-    # Format a batch of author names with collision resolution.
-    # Returns Hash{String => String} mapping raw names to disambiguated formatted names.
+    # Formats a batch of names so two different authors never render the same.
+    # Returns Hash{String => String} of raw name to formatted name.
     def format_authors(names)
       NameCollisionResolver.resolve(names, author_format)
     end
@@ -190,12 +187,11 @@ module Railbow
       val.is_a?(String) ? val : ""
     end
 
-    # Built-in regex for extracting ticket/task identifiers from branch names.
-    # Matches patterns like: ps-123, 123, abc123, ab-123-456, feat/ps-1234, feat/123-some-feature
+    # Ticket ids in branch names: ps-123, 123, abc123, ab-123-456, feat/ps-1234,
+    # feat/123-some-feature.
     TICKET_RE = /(?:^|\/)([a-z]{1,5}-?\d+(?:-\d+)*|\d+(?:-\d+)*)/i
 
-    # Extract a ticket identifier from a branch name.
-    # Returns the matched identifier or the original branch name if no match.
+    # The branch's ticket id, or the whole branch name when it has none.
     def extract_branch_ticket(branch)
       m = branch.match(TICKET_RE)
       m ? m[1] : branch
@@ -255,10 +251,9 @@ module Railbow
       db["full"] == true
     end
 
-    # Expand only the first database, summarizing the rest in a line each - but
-    # never at the cost of hiding work: a database holding pending migrations
-    # is always drawn in full, since that is the one thing you may need to act
-    # on. RBW_DB=full overrides it, and it does not apply to inline runs.
+    # Expand only the first database, summarizing the rest in a line each. A
+    # database with pending migrations is always drawn in full, since that is
+    # what you may need to act on. RBW_DB=full overrides it; inline ignores it.
     def db_focus?
       db["focus"] == true
     end

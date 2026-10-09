@@ -7,9 +7,8 @@ require_relative "railbow/config"
 module Railbow
   class Error < StandardError; end
 
-  # Returns true when Railbow formatting should be disabled.
-  # Checks for explicit opt-out, standard conventions, CI, and LLM agents.
-  # RBW_PLAIN always wins; RBW_FORCE beats every auto-detection below it.
+  # True when railbow should leave the stock Rails output alone. RBW_PLAIN
+  # always wins; RBW_FORCE beats every auto-detection below it.
   def self.plain?
     return true if failure
     return true if Params.plain?
@@ -26,11 +25,9 @@ module Railbow
     attr_accessor :failure
   end
 
-  # Runs railbow's rendering for a hooked Rails command. A railbow bug must
-  # never break the command itself, so an error falls back to the stock Rails
-  # output and switches railbow off for the rest of the process. Errors raised
-  # by Rails inside the fallback still propagate, as they would without
-  # railbow.
+  # A railbow bug must never break the Rails command it decorates: an error
+  # falls back to the stock output and switches railbow off for the process.
+  # Errors Rails raises inside the fallback still propagate.
   def self.guard(fallback)
     yield
   rescue => e
@@ -48,5 +45,4 @@ module Railbow
   end
 end
 
-# Load Railtie if Rails is available
 require_relative "railbow/railtie" if defined?(Rails::Railtie)

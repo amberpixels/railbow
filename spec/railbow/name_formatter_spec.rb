@@ -4,8 +4,6 @@ require "railbow/name_formatter"
 
 RSpec.describe Railbow::NameFormatter do
   describe ".format" do
-    # --- Pattern tokens ---
-
     it "F = first initial" do
       expect(described_class.format("John Doe", "F")).to eq("J")
     end
@@ -48,14 +46,10 @@ RSpec.describe Railbow::NameFormatter do
       expect(described_class.format("John Michael James Doe", "MMMM")).to eq("Michael James")
     end
 
-    # --- Literals ---
-
     it "preserves literal characters" do
       expect(described_class.format("John Doe", "LLLL, FFFF")).to eq("Doe, John")
       expect(described_class.format("John Doe", "FFFF L.")).to eq("John D.")
     end
-
-    # --- Composite patterns ---
 
     it "FF L pattern" do
       expect(described_class.format("John Doe", "FF L")).to eq("Jo D")
@@ -68,8 +62,6 @@ RSpec.describe Railbow::NameFormatter do
     it "FFFF MMMM LLLL pattern" do
       expect(described_class.format("John Michael Doe", "FFFF MMMM LLLL")).to eq("John Michael Doe")
     end
-
-    # --- Named presets ---
 
     it "preset: initials" do
       expect(described_class.format("John Doe", "initials")).to eq("J D")
@@ -96,8 +88,6 @@ RSpec.describe Railbow::NameFormatter do
       expect(described_class.format("John Doe", "full_name_short")).to eq("John D.")
       expect(described_class.format("John Michael Doe", "full_name_short")).to eq("John D.")
     end
-
-    # --- Edge cases ---
 
     it "returns empty string for nil" do
       expect(described_class.format(nil, "FF L")).to eq("")

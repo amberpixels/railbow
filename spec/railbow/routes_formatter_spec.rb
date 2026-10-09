@@ -3,8 +3,8 @@
 require "spec_helper"
 require "railbow/routes_formatter"
 
-# Minimal stub for ActionDispatch::Routing::ConsoleFormatter::Sheet
-# so we can test the prepended module in isolation.
+# Stands in for Rails' ConsoleFormatter::Sheet so the prepended module runs
+# without loading ActionDispatch.
 module ActionDispatch
   module Routing
     module ConsoleFormatter
@@ -53,7 +53,6 @@ module ActionDispatch
   end
 end
 
-# Prepend the module under test
 ActionDispatch::Routing::ConsoleFormatter::Sheet.prepend(Railbow::RoutesFormatter)
 
 RSpec.describe Railbow::RoutesFormatter do
@@ -142,7 +141,6 @@ RSpec.describe Railbow::RoutesFormatter do
       result = strip_ansi(formatter.result)
       expect(result).to include("── users ──")
       expect(result).to include("── (other) ──")
-      # (other) should come after users
       expect(result.index("── users ──")).to be < result.index("── (other) ──")
     end
 

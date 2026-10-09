@@ -66,13 +66,10 @@ RSpec.describe Railbow::Config do
         described_class.root = project_dir
         config = described_class.load
 
-        # Global layer added Verb
         expect(config.dig("aliases", "values", "Verb", "GET")).to eq("G")
-        # Project layer overrode Status up
         expect(config.dig("aliases", "values", "Status", "up")).to eq("UP")
-        # Local layer overrode Status down
         expect(config.dig("aliases", "values", "Status", "down")).to eq("DN")
-        # Gem default columns preserved
+        # From GEM_DEFAULTS, which no layer above touches
         expect(config.dig("aliases", "columns", "Status")).to eq("Live")
       end
     end

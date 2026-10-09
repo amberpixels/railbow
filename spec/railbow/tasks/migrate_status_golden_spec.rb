@@ -6,16 +6,10 @@ require "support/status_fixture"
 
 load File.expand_path("../../../lib/railbow/tasks/migrate_status.rake", __dir__)
 
-# Pins the full single-database render byte for byte.
-#
-# Multi-database support rests on one promise: a single-database app sees output
-# identical to what it saw before. This spec is that promise, and it is deliberately
-# brittle - it fails on any change to colors, spacing, glyphs or column order.
-#
-# When a change to the render is intentional, regenerate rather than hand-edit:
+# Pins the single-database render byte for byte, so it fails on any change to
+# colors, spacing, glyphs or column order. For an intended change, regenerate
+# rather than hand-edit, then check every moved byte in `git diff --word-diff`:
 #   REGENERATE_GOLDEN=1 bundle exec rspec spec/railbow/tasks/migrate_status_golden_spec.rb
-# then read the diff (`git diff --word-diff` on the fixture) and confirm every
-# byte that moved was meant to move.
 RSpec.describe "db:migrate:status golden output" do
   include StatusFixture
 
@@ -60,9 +54,8 @@ RSpec.describe "db:migrate:status golden output" do
     expect(output).to eq(File.read(golden))
   end
 
-  # The golden file is only a guard if it actually covers the render. These
-  # assert the fixture exercises each feature, so a regeneration that silently
-  # drops one (an exception swallowed into an empty column, say) still fails.
+  # A regeneration that silently drops a feature (an exception swallowed into
+  # an empty column, say) must still fail.
   describe "coverage of the render path" do
     let(:output) { with_migration_files { |dir| render(dir) } }
 

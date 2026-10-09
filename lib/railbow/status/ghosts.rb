@@ -46,8 +46,8 @@ module Railbow
 
         rows = {}
         versions.each do |v|
-          # Absent from detect = deliberately suppressed (dismissed, or superseded
-          # with hide_superseded on) - render as plain NO FILE, do not re-recover.
+          # Absent from detect means suppressed (dismissed, or superseded with
+          # hide_superseded on): render as plain NO FILE, do not re-recover.
           next unless (orphan = orphans[v])
 
           row = if orphan.filename && !orphan.filename.empty?
@@ -73,9 +73,9 @@ module Railbow
         )
       end
 
-      # Detect reads stored snapshots only. A version it lists without a filename
-      # has no snapshot yet, so fall back to live git/worktree recovery - that
-      # keeps fresh clones working with zero setup.
+      # Detect reads stored snapshots only, so a version listed without a
+      # filename falls back to live git/worktree recovery. That keeps fresh
+      # clones working with zero setup.
       def from_live_recovery(version, with_content)
         snapshot = begin
           Mighost::API.find_or_recover_snapshot(version)
@@ -131,7 +131,6 @@ module Railbow
         end
       end
 
-      # The name a ghost row displays, derived from its recovered filename.
       def display_name(ghost)
         ghost.filename
           .sub(/\A\d+_/, "")      # strip version prefix

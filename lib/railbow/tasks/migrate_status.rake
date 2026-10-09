@@ -6,17 +6,14 @@ require_relative "../status/help"
 require_relative "../status/printer"
 require_relative "../status/section"
 
-# Overrides the two DatabaseTasks methods db:migrate:status runs through.
-#
-# Rails calls migrate_status once per database, inside with_temporary_pool_for_each
-# - both for db:migrate:status and for db:migrate:status:<database_name>. Wrapping
-# the loop is what lets railbow render the databases together instead of one
-# blind table each.
+# Rails calls migrate_status once per database inside
+# with_temporary_pool_for_each, for db:migrate:status and
+# db:migrate:status:<database_name> alike. Wrapping that loop is what lets
+# railbow render the databases together instead of one blind table each.
 module Railbow
   module MigrateStatusFormatter
-    # Every supported Rails version (7.2 through 8.1) routes the per-database
-    # loop through here. Arguments are forwarded verbatim so Rails keeps
-    # applying its own defaults.
+    # Rails 7.2 through 8.1 all route through here. Arguments pass verbatim so
+    # Rails keeps applying its own defaults.
     def with_temporary_pool_for_each(*args, **kwargs, &block)
       Railbow::MultiDb.batch { super(*args, **kwargs, &block) }
     end
@@ -40,19 +37,17 @@ module Railbow
         Kernel.abort "Schema migrations table does not exist yet."
       end
 
-      # Rails' own table comes first and outside the guard: an error there is
-      # Rails' (a database that is down, say) and raises exactly as it would
-      # without railbow. Captured while this database's pool is still open, it
-      # is also the fallback should railbow fail to render.
+      # Outside the guard: an error here is Rails' own (a database that is
+      # down) and must raise as it would without railbow. Captured while the
+      # pool is still open, it is also the fallback.
       stock = railbow_capture_stdout { super }
 
       Railbow.guard(-> { $stdout.write(stock) }) do
         section = Railbow::Status::Section.new(migration_connection_pool)
         section.fallback_output = stock
 
-        # Without a batch (a direct call, or a Rails that no longer routes
-        # through with_temporary_pool_for_each) the section prints on its own,
-        # which is exactly the pre-multi-database behavior.
+        # No batch (a direct call, or a Rails that skips
+        # with_temporary_pool_for_each): the section prints on its own.
         if batch
           batch.add(section)
         else

@@ -31,11 +31,10 @@ module Railbow
         git_email = Fixtures::DEMO_USER_EMAIL
         git_name = Fixtures::DEMO_USER_NAME
 
-        # Latest migration date - for "fresh" landed badge detection
+        # Decides which landed badges count as fresh.
         latest_version = migrations.last[:version]
         latest_mig_date = parse_version_date(latest_version)
 
-        # Check if any landed tags exist
         has_landed_tags = migrations.any? { |m|
           next false unless m[:landed_date]
           mig_date = parse_version_date(m[:version])
@@ -55,13 +54,12 @@ module Railbow
             truncate_fn: ->(cell_raw, max_w) { formatter.name_with_tags_fitted(cell_raw, max_w) },
             shrinkable: true, shrink_floor: 24)
         ]
-        # No Author column in default config (author:me only highlights)
+        # No Who column: author:me only highlights.
 
         tables_truncate_fn = ->(cell_raw, max_w) { formatter.table_tags_fitted(cell_raw, max_w) }
         table_columns << Railbow::Table::Column.new(label: "Tables", droppable: 1,
           truncate: true, truncate_fn: tables_truncate_fn)
 
-        # Build rows
         highlight_rows = Set.new
         down_rows = Set.new
         rows = migrations.each_with_index.map do |m, idx|
@@ -74,10 +72,8 @@ module Railbow
 
           display_name = m[:name]
 
-          # Diff tag (branch badge)
           diff_tag = m[:branch] ? formatter.diff_tag_branch(m[:branch]) : nil
 
-          # Landed badge
           landed_tag = nil
           if m[:landed_date]
             mig_date = parse_version_date(m[:version])
@@ -87,7 +83,6 @@ module Railbow
             end
           end
 
-          # Append tags to display_name
           tags = [landed_tag, diff_tag].compact.join(" ")
           if !tags.empty? && name_col_width
             tags_width = formatter.display_width(formatter.strip_ansi(tags))
@@ -102,20 +97,18 @@ module Railbow
 
           created_at = formatter.format_date(m[:version], date_format)
 
-          # Highlight current user's rows (author:me mode)
+          # author:me highlighting.
           if m[:author_email] == git_email ||
               (git_name && m[:author_name] && m[:author_name].downcase == git_name.downcase)
             highlight_rows << idx
           end
 
-          # Table tags
           table_tags = formatter.table_tags(m[:tables])
 
           [colored_status, m[:version], created_at, display_name, table_tags]
         end
 
-        # Calendar furniture. Driven by the real params, so RBW_CALENDAR can be
-        # tried out here without a Rails project.
+        # Real params, so RBW_CALENDAR can be tried without a Rails project.
         calendar = Railbow::Calendar.build(
           migrations.map { |m| m[:version] },
           weeks: Railbow::Params.calendar_wdividers?,

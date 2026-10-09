@@ -1,22 +1,17 @@
 # frozen_string_literal: true
 
 module Railbow
-  # Assigns maximally-spaced colors to a set of unique labels.
+  # Spreads a set of labels evenly around the color wheel by rank. Hashing
+  # into a palette could land two labels on neighboring colors; by rank, two
+  # labels sit opposite each other, three about 120 deg apart, and so on.
   #
-  # Instead of hashing into a fixed palette (where two labels can collide
-  # onto adjacent colors), this assigns colors by rank — evenly spacing
-  # hues around the color wheel. Two labels always get maximally different
-  # colors, three labels get ~120 deg apart, etc.
-  #
-  # Usage:
   #   assigner = Railbow::ColorAssigner.new(["Alice", "Bob", "Carol"])
   #   assigner.color_for("Alice")  # => "\e[38;5;174m"
   #   assigner.code_for("Bob")     # => 116  (256-color code)
   #
   class ColorAssigner
-    # Soft/muted 256-color codes arranged around the hue wheel.
-    # 12 stops, evenly spaced in hue, all at moderate saturation/lightness
-    # so they look pleasant on dark terminals.
+    # Muted 256-color codes in hue order, at moderate saturation and
+    # lightness so they sit well on dark terminals.
     WHEEL = [
       174, # 0°   coral / muted rose
       216, # 30°  peach
@@ -39,13 +34,12 @@ module Railbow
       end
     end
 
-    # Returns the 256-color ANSI escape for the given label.
     def color_for(label)
       code = code_for(label)
       "\e[38;5;#{code}m"
     end
 
-    # Returns just the 256-color code integer for the given label.
+    # An unknown label gets the first color.
     def code_for(label)
       @mapping[label] || WHEEL[0]
     end

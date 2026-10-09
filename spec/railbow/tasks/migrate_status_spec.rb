@@ -152,9 +152,8 @@ RSpec.describe Railbow::MigrateStatusFormatter do
     end
   end
 
-  # The time window is a soft limit: it never hides so much that the table
-  # stops being useful. A database with a handful of migrations shows all of
-  # them however old they are, rather than reporting an empty period.
+  # The time window is a soft limit: a database with a handful of migrations
+  # shows all of them however old, rather than an empty period.
   describe "#migrate_status minimum row floor" do
     def old_migrations(count)
       (1..count).map { |i| ["up", format("202001010000%02d", i), "Add Apples #{i}"] }

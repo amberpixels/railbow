@@ -12,16 +12,11 @@ require_relative "ghosts"
 
 module Railbow
   module Status
-    # One migrations directory's worth of db:migrate:status.
-    #
-    # Usually that is one database. Databases sharing a migrations_paths (the
-    # shape horizontal sharding takes) see the same files and differ only in
-    # what they have applied, so they merge into a single section carrying a
+    # One migrations directory's worth of db:migrate:status. Databases sharing
+    # a migrations_paths (horizontal sharding) merge into one section with a
     # status per database.
-    #
-    # Rows are built lazily, on first read, because merging has to finish
-    # before the status cells can be built. A section never prints: Printer
-    # owns output, which is what lets sections share column widths.
+    # Rows are built lazily because merging must finish first. Printer owns
+    # output, which is what lets sections share column widths.
     class Section
       # Index of the Date column, where calendar week ticks are drawn.
       TICK_COL = 2
@@ -46,8 +41,7 @@ module Railbow
       # railbow fails to render it.
       attr_accessor :fallback_output
 
-      # True when the time window left too few rows and the floor topped the
-      # section back up, which is worth saying out loud: the table then shows
+      # True when the floor topped the section back up, so the table shows
       # migrations from outside the window it advertises.
       def floor_applied?
         @floor_applied == true
@@ -68,8 +62,7 @@ module Railbow
         collect(pool)
       end
 
-      # The database this section is named after. Multi-database sections use
-      # #databases; this is the single-database convenience.
+      # Single-database convenience; multi-database sections use #databases.
       def database
         databases.first[:database]
       end
@@ -86,9 +79,8 @@ module Railbow
         migrations_key == other.migrations_key
       end
 
-      # Folds another database that runs the same migration files into this
-      # section: its statuses join the existing rows, its identity joins the
-      # header, and anything already built is discarded.
+      # Folds in another database running the same migration files. Anything
+      # already built is discarded.
       def merge!(other)
         other.entries.each do |version, entry|
           mine = (@entries[version] ||= {name: entry[:name], statuses: {}})
@@ -112,10 +104,8 @@ module Railbow
         databases.size > 1
       end
 
-      # Whether any row this section would render is still pending. Answered
-      # from the collected entries, so asking costs no git work - which is the
-      # point, since it is asked in order to decide whether to build the rows
-      # at all.
+      # Answered from collected entries, so it costs no git work: it is asked
+      # to decide whether to build the rows at all.
       def pending_in_view?
         entries.any? { |_, entry| entry[:statuses].value?("down") }
       end
@@ -228,11 +218,9 @@ module Railbow
         @latest_applied_version = applied.last&.dig(1)&.to_s
       end
 
-      # The time window is a soft limit. Whatever it leaves, the floor tops the
-      # result back up to RBW_SINCE_MIN rows, so a database with five
-      # migrations shows all five rather than hiding the two that happen to be
-      # old. The window is still what decides whether the section reads as
-      # recent - see #collect.
+      # The time window is a soft limit: the floor tops the result back up to
+      # RBW_SINCE_MIN rows. The window alone still decides whether the section
+      # reads as recent (see #collect).
       def apply_since_filter(db_list)
         since_cutoff = Railbow::Params.parse_since(since_value, context: "migrations")
         unless since_cutoff
@@ -318,13 +306,9 @@ module Railbow
         @calendar = build_calendar
       end
 
-      # The name column only needs capping when something else competes for the
-      # row: table tags, an author column, branch badges or landed badges.
-      #
-      # On a terminal too narrow for the full row the width budget degrades the
-      # table instead of letting it wrap: the name column shrinks first, then
-      # Tables is dropped, then the formatted date (the raw Migration ID keeps
-      # the timestamp), then Who.
+      # On a narrow terminal the table degrades instead of wrapping: the name
+      # column shrinks first, then Tables, the date (the Migration ID keeps the
+      # timestamp) and Who are dropped, in that order.
       def build_columns
         @name_col_width = needs_name_truncation? ? NAME_COL_WIDTH : nil
 
@@ -382,9 +366,8 @@ module Railbow
           name = entry[:name]
           statuses = entry[:statuses]
 
-          # A pending migration is not in effect yet: grey the whole row out so
-          # it reads as inactive next to the applied ones. In a shard group only
-          # a row pending everywhere reads as inactive.
+          # Pending rows are greyed out as not in effect; in a shard group only
+          # a row pending everywhere.
           @down_rows << idx if statuses.values.all? { |s| s == "down" }
 
           ghost = name.include?(NO_FILE) ? ghosts[version] : nil
@@ -431,8 +414,7 @@ module Railbow
         @status_aliases[status] || status
       end
 
-      # Builds the Migration Name cell and right-aligns whatever badges it
-      # carries. Yields a status indicator when the row earns one.
+      # Yields a status indicator when the row earns one.
       def name_cell(name:, version:, ghost:, latest_mig_date:)
         if ghost
           return with_tags(Ghosts.display_name(ghost), Ghosts.tag(ghost), strip: false)
@@ -473,8 +455,8 @@ module Railbow
         formatter.landed_tag(landed, fresh: latest_mig_date && landed >= latest_mig_date)
       end
 
-      # Pads the name so its tags sit flush against the right edge of the
-      # column. Falls back to a two-space gap when the column is uncapped.
+      # Tags sit flush right in a capped column, two spaces after the name
+      # otherwise.
       def with_tags(name, tags, strip: true)
         return name if tags.nil? || tags.empty?
         return "#{name}  #{tags}" unless @name_col_width

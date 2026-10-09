@@ -282,9 +282,7 @@ RSpec.describe Railbow::MigrationParser do
         Setting.find_each { |s| s.update_column(:x, 1) }
         Audit.find_each { |a| a.destroy }
       RUBY
-      # users from DDL, settings from first matching model call; Audit dropped (cap = 2).
-      # Note: `Audit.find_each` would match the pattern but only `find_each` is hit first
-      # for Setting; we stop after adding settings.
+      # users from DDL, settings from the first model call; Audit falls past the cap.
       expect(described_class.extract_tables_from_content(content)).to eq(["users", "settings"])
     end
 

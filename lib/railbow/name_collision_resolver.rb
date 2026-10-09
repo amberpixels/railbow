@@ -3,13 +3,9 @@
 require_relative "name_formatter"
 
 module Railbow
-  # Detects and resolves collisions when multiple different names produce the
-  # same formatted output.  Works by progressively expanding pattern tokens
-  # (F → FF → FFF → FFFF, then L) until every distinct raw name maps to a
-  # unique formatted string.
-  #
-  # Names that share the same first+last name but differ only in middle name
-  # are treated as the same person and merged before collision detection.
+  # Makes distinct names format distinctly by widening pattern tokens (F to
+  # FFFF, then L) until no two collide. Names differing only in the middle
+  # name count as one person and share an output.
   #
   #   NameCollisionResolver.resolve(["John Doe", "Jane Doe"], "F L")
   #   # => {"John Doe" => "Jo D", "Jane Doe" => "Ja D"}
@@ -20,19 +16,16 @@ module Railbow
 
     # @param names [Array<String, nil>] raw author names (may contain duplicates/nils)
     # @param pattern [String] a NameFormatter pattern or preset name
-    # @return [Hash{String => String}] raw_name → disambiguated formatted name
+    # @return [Hash{String => String}] raw name to disambiguated formatted name
     def resolve(names, pattern)
       pattern = NameFormatter::PRESETS.fetch(pattern, pattern)
       uniq_names = names.compact.reject(&:empty?).uniq
 
-      # Merge names that are the same person (same first+last, differ only in middle)
       canonical, aliases = merge_same_person(uniq_names)
 
-      # Format every canonical name with the base pattern
       result = {}
       canonical.each { |n| result[n] = NameFormatter.format(n, pattern) }
 
-      # Find collision groups (different raw names → same formatted output)
       collisions = find_collisions(result)
       unless collisions.empty?
         tokens = parse_tokens(pattern)
@@ -41,16 +34,14 @@ module Railbow
         end
       end
 
-      # Expand aliases: all variant spellings get the same formatted output
       aliases.each { |variant, canon| result[variant] = result[canon] }
 
       result
     end
 
-    # --- private helpers ---
-
-    # Group names by (first, last) and pick the shortest as canonical.
-    # Returns [canonical_names, aliases_hash] where aliases maps variant → canonical.
+    # Groups names by first and last name; the shortest (no middle name) is
+    # canonical. Returns [canonical_names, aliases], aliases mapping each
+    # variant to its canonical name.
     def merge_same_person(names)
       groups = {}
       names.each do |name|
@@ -66,7 +57,6 @@ module Railbow
       canonical = []
       aliases = {}
       groups.each_value do |group|
-        # Pick shortest name as canonical (the one without middle name)
         canon = group.min_by(&:length)
         canonical << canon
         group.each { |name| aliases[name] = canon unless name == canon }
@@ -81,14 +71,12 @@ module Railbow
         .transform_values { |pairs| pairs.map(&:first) }
     end
 
-    # Resolve a single collision group by progressively expanding tokens.
-    # Only names that still collide continue to be expanded; once a name
-    # becomes unique it keeps its current (minimal) expansion.
+    # Widens tokens, all F tokens before L, only for names that still collide:
+    # a name that becomes unique keeps its shortest distinct form.
     def resolve_group(raw_names, base_pattern, base_tokens, result)
       remaining = raw_names.dup
       tokens = base_tokens.map(&:dup)
 
-      # Expansion order: exhaust all F tokens first, then L tokens
       expansion_order = tokens.each_index.sort_by { |i| (tokens[i][:type] == "F") ? 0 : 1 }
 
       expansion_order.each do |ti|
@@ -102,15 +90,14 @@ module Railbow
 
           remaining.each { |n| result[n] = NameFormatter.format(n, current_pattern) }
 
-          # Check collisions only within this group (not the full result),
-          # so expansion from one group can't chase collisions with other groups
+          # Within this group only, so one group's expansion never chases
+          # collisions with another's.
           still_colliding = find_collisions(result.slice(*raw_names))
           if still_colliding.empty?
             remaining = []
             break
           end
 
-          # Only keep expanding names that still collide within the group
           remaining = still_colliding.values.flatten
         end
 
@@ -119,7 +106,7 @@ module Railbow
 
       return if remaining.empty?
 
-      # Last resort: numeric suffixes
+      # Fully expanded and still equal: number them.
       find_collisions(result.slice(*remaining)).each_value do |group|
         group[1..].each_with_index do |name, i|
           suffix = SUPERSCRIPTS[i] || (i + 2).to_s
@@ -128,7 +115,7 @@ module Railbow
       end
     end
 
-    # Parse pattern into token descriptors: [{type:, length:, maxed:}, ...]
+    # [{type:, length:, maxed:}, ...] for each token in the pattern.
     def parse_tokens(pattern)
       tokens = []
       pattern.scan(NameFormatter::TOKEN_RE) do |match|
@@ -139,7 +126,7 @@ module Railbow
       tokens
     end
 
-    # Rebuild a pattern string from token descriptors, preserving literals.
+    # The original pattern with its tokens resized, literals kept.
     def rebuild_pattern(tokens, original_pattern)
       ti = 0
       original_pattern.gsub(NameFormatter::TOKEN_RE) do

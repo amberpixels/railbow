@@ -1,22 +1,22 @@
 # frozen_string_literal: true
 
 module Railbow
-  # Formats person names using a pattern language inspired by date-format strings.
+  # Formats person names with a pattern language modeled on date formats.
   #
-  # Tokens (repeat the letter to control length; 4+ means full word):
-  #   F / FF / FFF / FFFF+  — first name (1 char, 2 chars, … , full)
-  #   L / LL / LLL / LLLL+  — last name
-  #   M / MM / MMM / MMMM+  — middle name(s)
+  # Tokens (the letter count is the length; 4 or more means the full word):
+  #   F / FF / FFF / FFFF+   first name (1 char, 2 chars, 3 chars, full)
+  #   L / LL / LLL / LLLL+   last name
+  #   M / MM / MMM / MMMM+   middle name(s)
   #
   # Any other characters (spaces, dots, commas) are literals and pass through.
   #
   # Named presets:
-  #   "initials"        → "F L"
-  #   "short"           → "FF L"
-  #   "first_name"      → "FFFF"
-  #   "last_name"       → "LLLL"
-  #   "full_name"       → "FFFF MMMM LLLL"
-  #   "full_name_short" → "FFFF L."
+  #   "initials"        => "F L"
+  #   "short"           => "FF L"
+  #   "first_name"      => "FFFF"
+  #   "last_name"       => "LLLL"
+  #   "full_name"       => "FFFF MMMM LLLL"
+  #   "full_name_short" => "FFFF L."
   module NameFormatter
     PRESETS = {
       "initials" => "F L",
@@ -34,8 +34,7 @@ module Railbow
 
     module_function
 
-    # Format a name according to a pattern or preset name.
-    # Returns "" for nil/empty input.
+    # Formats a name by a pattern or preset name. "" for a nil or empty name.
     def format(name, pattern)
       return "" if name.nil? || name.empty?
 
@@ -59,14 +58,14 @@ module Railbow
         expanded.empty? ? EMPTY : expanded
       end
 
-      # Remove sentinels and any adjacent non-letter literals (dots, commas, spaces)
+      # A missing part takes its adjacent literals with it, so "F L." on a
+      # one-word name gives no stray dot.
       result.gsub(/[^a-zA-Z\x00]*\x00[^a-zA-Z\x00]*/, " ")
         .gsub(/  +/, " ")
         .strip
     end
 
-    # Truncate a word to `len` chars (4+ means full), preserving original case
-    # for full words, capitalizing otherwise.
+    # A full word keeps its case; a cut one is capitalized.
     def truncate(word, len)
       return "" if word.nil? || word.empty?
 

@@ -61,10 +61,9 @@ module Railbow
 
         rows = prepare_rows(rows)
 
-        # Width budget: when even fully shrunk columns cannot bring the table
-        # under the terminal width, sacrifice the most expendable column and
-        # render without it. One column per pass - the reduced renderer asks
-        # again with what is left.
+        # When even fully shrunk columns overflow the terminal, drop the most
+        # expendable column and render again. One column per pass: the reduced
+        # renderer asks again with what is left.
         if (drop = drop_index_to_fit(rows))
           return dropped_renderer(drop).render(
             rows.map { |row| row.reject.with_index { |_, i| i == drop } },
@@ -76,7 +75,6 @@ module Railbow
         resolved = resolve_widths(rows)
         shrink_to_fit!(resolved, rows)
 
-        # In oneline mode, truncate non-sticky non-last columns at resolved width
         if @compact[:oneline]
           rows = rows.map { |row|
             row.each_with_index.map { |cell, i|
@@ -134,7 +132,7 @@ module Railbow
           if col.fixed?
             w = col.width
           elsif i == last
-            # Last column: don't pad, will be wrapped if it overflows
+            # The last column flexes to the terminal, so it is never padded
             w = 0
           else
             header_w = display_width(effective_label(col))
@@ -205,8 +203,6 @@ module Railbow
           "#{pad}#{content}#{RESET}#{pad}"
         }
 
-        # Join prefix parts with per-position separators.
-        # Loop index i joins column i-1 and column i (separator index = i-1).
         # dup: appending to prefix_parts.first itself would corrupt the parts
         # that render_last_cell measures for the wrapped-line indent.
         prefix = prefix_parts.first.to_s.dup
@@ -216,7 +212,6 @@ module Railbow
 
         last_cell_raw = row[last].to_s
 
-        # Separator before the last column has index (last - 1)
         last_sep = separator_at(last - 1, tick_col)
         render_last_cell(prefix, prefix_parts, last_cell_raw, widths, last, col_sep: last_sep, highlight: highlight, ghost: ghost, dim: dim)
       end
@@ -225,7 +220,6 @@ module Railbow
         pad = effective_padding
         sep = col_sep || theme.col_separator
 
-        # Truncate if configured via column settings
         if columns[last].truncate && columns[last].max_width
           last_cell_raw = truncate_str(last_cell_raw, columns[last].max_width)
         end
@@ -235,7 +229,7 @@ module Railbow
         prefix_width = compute_prefix_width(widths, last)
         last_col_max = term_w ? [term_w - prefix_width - display_width(pad), MIN_LAST_COL].max : nil
 
-        # Use custom truncate_fn if available (e.g. table tags with +N)
+        # A column's own truncate_fn knows its content (table tags fold into +N)
         if columns[last].truncate_fn && last_col_max &&
             display_width(last_cell_plain) > last_col_max
           last_cell_raw = columns[last].truncate_fn.call(last_cell_raw, last_col_max)
@@ -243,7 +237,6 @@ module Railbow
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
-        # Truncate to terminal width (by whole words) instead of wrapping
         if columns[last].truncate && !columns[last].max_width && last_col_max &&
             display_width(last_cell_plain) > last_col_max
           last_cell_raw = truncate_by_words(last_cell_raw, last_col_max)
@@ -251,7 +244,6 @@ module Railbow
           return "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         end
 
-        # In oneline mode, truncate instead of wrapping
         if @compact[:oneline] && last_col_max && display_width(last_cell_plain) > last_col_max
           last_cell_raw = truncate_by_words(last_cell_raw, last_col_max)
           last_cell_raw = style_cell(last_cell_raw, highlight: highlight, ghost: ghost, dim: dim, accent: columns[last].accent)
@@ -263,11 +255,9 @@ module Railbow
         whole = "#{prefix}#{sep}#{pad}#{last_cell_raw}#{RESET}#{pad}"
         return whole unless last_col_max && display_width(strip_ansi(last_cell_raw)) > last_col_max
 
-        # Wrapping only helps when every line fits beside the fixed columns.
-        # With no room left, or a piece the wrapper cannot break small enough,
-        # each continuation line would be padded past the edge and the terminal
-        # would wrap it again, leaving a blank line before every fragment. The
-        # value goes on the row whole instead.
+        # Wrap only when every line fits beside the fixed columns. Otherwise the
+        # terminal re-wraps each padded continuation line, leaving a blank line
+        # before every fragment, so the value stays on its row whole.
         room = term_w - prefix_width - display_width(pad)
         wrapped = ansi_word_wrap(last_cell_raw, last_col_max)
         return whole unless wrapped.all? { |line| display_width(strip_ansi(line)) <= room }
@@ -300,14 +290,13 @@ module Railbow
       def compute_prefix_width(widths, last)
         pad_w = display_width(effective_padding)
         sep_w = display_width(theme.col_separator)
-        # Each non-last column: pad + content + pad, joined by separator
+        # Padded fixed columns, the separator after each, and the last
+        # column's leading pad.
         total = 0
         (0...last).each do |i|
           total += pad_w + widths[i] + pad_w
         end
-        # Separators between columns + trailing separator before last column
         total += sep_w * last
-        # Plus pad on last column
         total += pad_w
         total
       end
@@ -419,11 +408,9 @@ module Railbow
         widths
       end
 
-      # What the table needs from the terminal: every fixed column plus a
-      # reserve for the flexing last column, which truncates down to
-      # MIN_LAST_COL but never below it. The last column's header label counts
-      # too - it is drawn as-is, so a label wider than every cell would poke
-      # past the terminal edge otherwise.
+      # Every fixed column plus a reserve for the last column, which truncates
+      # down to MIN_LAST_COL but no further. Its header label counts too: it is
+      # drawn as-is, so a label wider than every cell would poke past the edge.
       def required_width(widths, rows)
         last = columns.size - 1
         last_w = rows.map { |row| display_width(strip_ansi(row[last].to_s)) }.max || 0
@@ -573,14 +560,13 @@ module Railbow
         value_aliases = @aliases[:values]
         return rows unless value_aliases&.any?
 
-        # Build column index → value alias map
         col_map = {}
         columns.each_with_index do |col, i|
           next unless col.aliased
 
           label = col.label
           col_map[i] = value_aliases[label] if value_aliases[label]
-          # Also look up by original name if column was renamed by alias
+          # Value aliases may name a renamed column by its original label
           original = @reverse_col_aliases[label]
           col_map[i] = value_aliases[original] if original && value_aliases[original]
         end
@@ -601,7 +587,7 @@ module Railbow
 
       def apply_cell_alias(cell, aliases_for_col)
         plain = strip_ansi(cell)
-        # Try exact match first, then prefix match for cells with appended indicators
+        # Exact match first, then a prefix match for cells with an indicator appended
         replacement = aliases_for_col[plain]
         if replacement
           cell.sub(plain) { replacement }

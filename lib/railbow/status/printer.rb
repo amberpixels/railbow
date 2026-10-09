@@ -9,12 +9,9 @@ require_relative "../table"
 
 module Railbow
   module Status
-    # Turns collected sections into output. The only place db:migrate:status
-    # writes to stdout, which is what lets a multi-database run share column
-    # widths and print a single header.
-    #
-    # A run holding one database renders exactly as it did before multi-database
-    # support existed: no overview line, no section rule, nothing new.
+    # The only place db:migrate:status writes to stdout, which is what lets a
+    # multi-database run share column widths and print a single header. A
+    # single-database run gets no overview line and no section rule.
     class Printer
       RULE = "─"
       COLLAPSED = "⋯"
@@ -88,9 +85,8 @@ module Railbow
         puts render_table(section)
       end
 
-      # Says what the window hid, and admits when the floor overrode it: the
-      # table then holds rows older than the window it names, and a bare
-      # "hidden - SINCE=70d" would read as a contradiction next to them.
+      # Admits when the floor overrode the window: a bare "hidden - SINCE=70d"
+      # would contradict the older rows shown below it.
       def hidden_note(section)
         return nil unless section.hidden_count > 0
 
@@ -110,8 +106,7 @@ module Railbow
         puts
         puts section_header(section, renderer.fixed_width(widths))
 
-        # Reachable with RBW_DB=full, which asks for every section to be drawn
-        # in full, including the ones that would otherwise have collapsed.
+        # Reachable with RBW_DB=full, which draws even quiet sections in full.
         if section.state == :no_migrations
           puts formatter.yellow("  No migrations found")
           return
@@ -123,10 +118,9 @@ module Railbow
         puts render_table(section, renderer)
       end
 
-      # RBW_DB=inline: every database in one time-ordered table, each row
-      # carrying a Db badge. The calendar then spans the whole application
-      # rather than restarting per database, which is the point of asking for
-      # it. Quiet databases still collapse below the table.
+      # RBW_DB=inline: every database in one time-ordered table with a Db
+      # badge per row, so the calendar spans the whole application. Quiet
+      # databases still collapse below the table.
       def print_inline
         live = sections.reject { |s| collapse?(s) || s.rows.empty? }
         collapsed = sections - live
@@ -149,9 +143,8 @@ module Railbow
         collapsed.each { |section| puts collapsed_line(section) }
       end
 
-      # Sorted by version, so the databases interleave by when each migration
-      # was written. Ties fall back to config order, which keeps two databases
-      # that share a timestamp in database.yml order rather than an arbitrary one.
+      # Sorted by version; ties fall back to database.yml order rather than an
+      # arbitrary one.
       def inline_entries(live)
         assigner = Railbow::ColorAssigner.new(live.map { |s| inline_label(s) })
 
@@ -209,27 +202,21 @@ module Railbow
         puts formatter.dim("#{COLLAPSED} #{count_label(skipped.size, "database")} hidden: #{skipped.join(", ")}")
       end
 
-      # A quiet database says everything it has to say in one line. Nothing in
-      # the window means there is no table to draw either, so collapsing loses
-      # nothing - the counts below carry what the rows would have shown.
-      #
-      # RBW_DB=focus collapses the busy ones too, keeping the first database as
-      # the one you actually read. Pending migrations veto that: a database
-      # with work waiting is drawn in full however focused the run is.
+      # A quiet database has no table to draw, so one line says it all.
+      # RBW_DB=focus collapses all but the first database too, unless one has
+      # migrations pending.
       def collapse?(section)
         return false if Railbow::Params.db_full?
         return true if section.quiet?
-        # Focus shapes the sectioned view. Applying it to a merged table would
-        # drop every database but the first out of the very thing that exists
-        # to hold all of them.
+        # Focus would empty the inline table of every database but the first.
         return false if Railbow::Params.db_inline?
         return false unless Railbow::Params.db_focus?
 
         !focused?(section) && !section.pending_in_view?
       end
 
-      # The first database in database.yml, which is conventionally primary and
-      # is the one Rails migrates first.
+      # The first database in database.yml: conventionally primary, and the one
+      # Rails migrates first.
       def focused?(section)
         section.equal?(sections.first)
       end
@@ -279,9 +266,8 @@ module Railbow
         nil
       end
 
-      # A bare "10 of 50" reads as "10 fell inside the window". When the floor
-      # overrode the window the selection is a tail rather than a window, so it
-      # says "last 10 of 50" - the same words the single-database note uses.
+      # "last 10 of 50" when the floor overrode the window, since a bare
+      # "10 of 50" reads as "10 fell inside the window".
       def shown_count(section)
         shown = section.total_count - section.hidden_count
         section.floor_applied? ? "last #{shown}" : shown.to_s

@@ -46,7 +46,6 @@ RSpec.describe Railbow::Table::Renderer do
       rows = [["up", "001", "Test"]]
       result = renderer.render(rows)
       header_line = result.split("\n")[0]
-      # Header should NOT contain │
       expect(strip_ansi(header_line)).not_to include("\u2502")
     end
 
@@ -54,7 +53,6 @@ RSpec.describe Railbow::Table::Renderer do
       rows = [["up", "001", "Test"]]
       result = renderer.render(rows)
       data_line = result.split("\n")[1]
-      # Cells should have space padding around them
       expect(data_line).to match(/\s+up\s+/)
     end
 
@@ -62,7 +60,6 @@ RSpec.describe Railbow::Table::Renderer do
       rows = [["\e[32mup\e[0m", "001", "Test"]]
       result = renderer.render(rows)
       data_line = result.split("\n")[1]
-      # Before each │, there should be a RESET
       segments = data_line.split("\u2502")
       segments[0...-1].each do |seg|
         expect(seg).to end_with("\e[0m ")
@@ -99,7 +96,6 @@ RSpec.describe Railbow::Table::Renderer do
       plain = strip_ansi(result)
       lines = plain.split("\n")
 
-      # Header and data lines should have aligned columns
       expect(lines.size).to eq(3)
     end
 
@@ -122,7 +118,6 @@ RSpec.describe Railbow::Table::Renderer do
       result = strip_ansi(renderer.render(rows))
       lines = result.split("\n")
 
-      # Data rows should have aligned second column
       data_lines = lines[1..]
       positions = data_lines.map { |l| l.index("val") }
       expect(positions.compact.uniq.size).to eq(1)
@@ -211,16 +206,12 @@ RSpec.describe Railbow::Table::Renderer do
       result = renderer.render(rows, highlight_rows: Set[0])
       lines = result.split("\n")
 
-      # Highlighted row should contain WHITE around cell content
       expect(lines[1]).to include("\e[97m")
-      # Each WHITE section should be closed by RESET before separator
-      # The separator │ should appear between RESET sequences, not inside WHITE
+      # The separator │ is drawn outside WHITE: every white run is closed before it
       plain_parts = lines[1].split("\u2502")
       plain_parts.each do |part|
-        # No unclosed WHITE at the boundary — each part ends with RESET
         expect(part).to end_with("\e[0m ") | end_with("\e[0m") | end_with(" ")
       end
-      # Non-highlighted row should not contain WHITE
       expect(lines[2]).not_to include("\e[97m")
     end
   end
@@ -299,9 +290,8 @@ RSpec.describe Railbow::Table::Renderer do
       result = renderer.render(rows)
       data_lines = result.split("\n")[1..] # skip header
 
-      # Should wrap to multiple lines, not truncate
+      # Wrapped, not truncated: the whole value survives across the lines
       expect(data_lines.size).to be > 1
-      # Full content should be present across all lines
       full_plain = strip_ansi(data_lines.join(" "))
       expect(full_plain).to include("overflows")
       expect(full_plain).to include("terminal")
@@ -340,7 +330,6 @@ RSpec.describe Railbow::Table::Renderer do
       data_lines = result.split("\n")[1..]
 
       expect(data_lines.size).to be > 1
-      # Full content preserved across lines
       full_plain = strip_ansi(data_lines.join)
       expect(full_plain.gsub(/\s+/, "")).to include(long_prefix.gsub(/\s+/, ""))
     end
@@ -510,7 +499,6 @@ RSpec.describe Railbow::Table::Renderer do
       plain = strip_ansi(result)
       lines = plain.split("\n")
 
-      # Both rows should have the same column widths
       name_pos_1 = lines[1].index("test")
       name_pos_2 = lines[2].index("other")
       expect(name_pos_1).to eq(name_pos_2)
@@ -722,7 +710,6 @@ RSpec.describe Railbow::Table::Renderer do
       result = strip_ansi(renderer.render(rows))
       lines = result.split("\n")
 
-      # The B column should be at position >= 20
       b_pos = lines[1].index("y")
       expect(b_pos).to be >= 20
     end
@@ -737,7 +724,6 @@ RSpec.describe Railbow::Table::Renderer do
       result = strip_ansi(renderer.render(rows))
       lines = result.split("\n")
 
-      # The B column should be near position 5, not far out
       b_pos = lines[1].index("y")
       expect(b_pos).to be <= 10
     end
