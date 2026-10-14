@@ -218,14 +218,27 @@ module Railbow
         origins
       end
 
+      # The commit that first produced this filename. A plain log shows no diff
+      # for a merge commit, so a file named inside one (a migration
+      # re-timestamped while merging the base branch in) needs the -m form,
+      # oldest match first. -m stays a fallback: a later "merge main into
+      # feature" commit lists every main migration as added against one parent,
+      # and pick_origin_branch would then label those with the base branch.
       def adding_commit(filepath)
-        commit_out, cs = Railbow::GitUtils.capture2(
-          "log", "--diff-filter=AR", "--format=%H", "-1", "--", filepath
-        )
-        return nil unless cs.success?
+        commits = commits_touching(filepath, "-1")
+        return nil if commits.nil?
+        return commits.first if commits.any?
 
-        commit = commit_out.strip
-        commit.empty? ? nil : commit
+        commits_touching(filepath, "-m")&.last
+      end
+
+      def commits_touching(filepath, *flags)
+        out, status = Railbow::GitUtils.capture2(
+          "log", "--diff-filter=AR", "--format=%H", *flags, "--", filepath
+        )
+        return nil unless status.success?
+
+        out.each_line.map(&:strip).reject(&:empty?)
       end
 
       def branches_containing(commit)

@@ -113,4 +113,65 @@ RSpec.describe Railbow::Status::GitData do
       expect(git.landed_dates).to be_empty
     end
   end
+
+  describe "branch origins" do
+    let(:ok) { instance_double(Process::Status, success?: true) }
+    let(:failed) { instance_double(Process::Status, success?: false) }
+    let(:path) { "db/migrate/20260301120000_add_cherries.rb" }
+    let(:plain_sha) { "" }
+    let(:merge_shas) { "" }
+    let(:branch_queries) { [] }
+
+    # The plain log finds the commit that added a file; the -m form also sees
+    # files whose current name first appears inside a merge commit.
+    before do
+      allow(Railbow::GitUtils).to receive(:capture2) do |*args|
+        case args
+        in ["symbolic-ref", *] then ["refs/remotes/origin/main\n", ok]
+        in ["merge-base", "HEAD", "main"] then ["base000\n", ok]
+        in ["diff", "--name-status", *] then ["A\t#{path}\n", ok]
+        in ["log", "--diff-filter=AR", "--format=%H", "-1", "--", ^(path)] then [plain_sha, ok]
+        in ["log", "--diff-filter=AR", "--format=%H", "-m", "--", ^(path)] then [merge_shas, ok]
+        in ["branch", "--contains", String => sha, *]
+          branch_queries << sha
+          ["feature/PS-7\n", ok]
+        in ["rev-parse", "--abbrev-ref", "HEAD"] then ["feature/PS-7\n", ok]
+        in ["status", "--porcelain", *] then ["", ok]
+        else ["", failed]
+        end
+      end
+      allow(Railbow::GitUtils).to receive(:capture3).and_return(["", "", failed])
+    end
+
+    subject(:git) do
+      described_class.new(migrate_dir: "db/migrate", author_enabled: false, diff_enabled: true)
+    end
+
+    context "when the filename was created in a merge commit" do
+      let(:merge_shas) { "newer00\nolder00\n" }
+
+      it "falls back to a merge-aware log and attributes the oldest match" do
+        expect(git.branch_origins).to eq("20260301120000_add_cherries.rb" => "feature/PS-7")
+        expect(branch_queries).to eq(["older00"])
+      end
+    end
+
+    context "when the plain log finds the commit" do
+      let(:plain_sha) { "plain00\n" }
+
+      it "never runs the merge-aware log" do
+        expect(git.branch_origins).to eq("20260301120000_add_cherries.rb" => "feature/PS-7")
+        expect(branch_queries).to eq(["plain00"])
+        expect(Railbow::GitUtils).not_to have_received(:capture2)
+          .with("log", "--diff-filter=AR", "--format=%H", "-m", "--", path)
+      end
+    end
+
+    context "when neither log finds the commit" do
+      it "leaves the file without an origin" do
+        expect(git.branch_origins).to be_empty
+        expect(branch_queries).to be_empty
+      end
+    end
+  end
 end
