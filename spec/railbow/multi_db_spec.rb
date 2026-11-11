@@ -285,6 +285,140 @@ RSpec.describe "multi-database db:migrate:status" do
     end
   end
 
+  describe "the branch's own migrations" do
+    let(:migration) { Struct.new(:version, :filename) }
+
+    # A log database with three migrations, the newest of which the branch adds.
+    let(:log) do
+      versions = %w[20260101000002 20260101000003 20260101000004]
+      pool_double(name: "log", path: "db/migrate_log",
+        statuses: versions.zip(["Add Bananas", "Add Cherries", "Add Dates"]).map { |v, n| ["up", v, n] },
+        migrations: versions.map { |v| migration.new(v, "db/migrate_log/#{v}_x.rb") })
+    end
+
+    def branch_adds(*files, uncommitted: [])
+      ok = instance_double(Process::Status, success?: true)
+      allow(Railbow::GitUtils).to receive(:capture2).with("diff", "--name-status", any_args)
+        .and_return([files.map { |f| "A\tdb/migrate_log/#{f}\n" }.join, ok])
+      allow(Railbow::GitUtils).to receive(:capture2).with("status", "--porcelain", any_args)
+        .and_return([uncommitted.map { |f| "?? db/migrate_log/#{f}\n" }.join, ok])
+    end
+
+    let(:recent_version) { Time.now.strftime("%Y%m%d%H%M%S") }
+
+    before { allow(Railbow::Params).to receive(:db_focus?).and_return(true) }
+
+    it "shows them from a database focus would summarize, and nothing else of it" do
+      branch_adds("20260101000004_x.rb")
+
+      output = run([primary, log])
+      expect(output).to include("Add Dates")
+      expect(output).not_to include("Add Bananas")
+      expect(output).to include("1 on this branch of 3")
+      expect(output).not_to include("⋯ log")
+    end
+
+    it "counts uncommitted migrations as the branch's" do
+      branch_adds(uncommitted: ["20260101000003_x.rb"])
+
+      output = run([primary, log])
+      expect(output).to include("Add Cherries")
+      expect(output).not_to include("Add Dates")
+    end
+
+    it "reaches past the time window of a quiet database" do
+      allow(Railbow::Params).to receive(:since).and_return("90d")
+      allow(Railbow::Params).to receive(:since_min).and_return(0)
+      branch_adds("20260101000002_x.rb")
+
+      recent = pool_double(name: "primary",
+        statuses: [["up", Time.now.strftime("%Y%m%d%H%M%S"), "Add Apples"]])
+      output = run([recent, log])
+      expect(output).to include("Add Bananas")
+      expect(output).not_to include("Add Dates")
+    end
+
+    it "still summarizes a database the branch does not touch" do
+      branch_adds
+
+      expect(run([primary, log])).to include("⋯ log · 3 migrations")
+    end
+
+    it "is off without RBW_GIT=diff" do
+      allow(Railbow::Params).to receive(:git_diff?).and_return(false)
+      branch_adds("20260101000004_x.rb")
+
+      expect(run([primary, log])).to include("⋯ log")
+    end
+
+    it "keeps the pending count a narrowed database would have summarized" do
+      allow(Railbow::Params).to receive(:since).and_return("90d")
+      allow(Railbow::Params).to receive(:since_min).and_return(0)
+      branch_adds("#{recent_version}_x.rb")
+
+      versions = ["20200101000001", recent_version]
+      pending_log = pool_double(name: "log", path: "db/migrate_log",
+        statuses: [["down", versions[0], "Add Bananas"], ["up", versions[1], "Add Dates"]],
+        migrations: versions.map { |v| migration.new(v, "db/migrate_log/#{v}_x.rb") })
+      allow(Railbow::Params).to receive(:db_focus?).and_return(true)
+
+      output = run([primary, pending_log])
+      expect(output).to include("Add Dates")
+      expect(output).not_to include("Add Bananas")
+      expect(output).to include("1 pending outside the 90d window")
+    end
+
+    it "adds out-of-window branch migrations to a database drawn in full" do
+      allow(Railbow::Params).to receive(:since).and_return("90d")
+      allow(Railbow::Params).to receive(:since_min).and_return(0)
+      branch_adds("20200101000001_x.rb")
+
+      versions = ["20200101000001", recent_version]
+      focused = pool_double(name: "primary", path: "db/migrate_log",
+        statuses: [["up", versions[0], "Add Old Branch Work"], ["up", versions[1], "Add Apples"]],
+        migrations: versions.map { |v| migration.new(v, "db/migrate_log/#{v}_x.rb") })
+
+      output = run([focused, pool_double(name: "cache", path: "db/cache_migrate", statuses: [])])
+      expect(output).to include("Add Old Branch Work").and include("Add Apples")
+    end
+
+    it "narrows a shard group with a status per shard" do
+      branch_adds("20260101000004_x.rb")
+      shard = ->(name) {
+        pool_double(name: name, path: "db/migrate_log",
+          statuses: [["up", "20260101000002", "Add Bananas"], ["up", "20260101000004", "Add Dates"]],
+          migrations: %w[20260101000002 20260101000004].map { |v| migration.new(v, "db/migrate_log/#{v}_x.rb") })
+      }
+
+      output = run([primary, shard.call("log"), shard.call("log_shard_one")])
+      row = output.lines.find { |l| l.include?("Add Dates") }
+      expect(Railbow::Formatters::Base.new.strip_ansi(row)).to include("↑↑ ↑↑")
+      expect(output).not_to include("Add Bananas")
+    end
+
+    it "does not count a staged edit to an old migration" do
+      ok = instance_double(Process::Status, success?: true)
+      branch_adds
+      allow(Railbow::GitUtils).to receive(:capture2).with("status", "--porcelain", any_args)
+        .and_return(["M  db/migrate_log/20260101000002_x.rb\n", ok])
+
+      expect(run([primary, log])).to include("⋯ log · 3 migrations")
+    end
+
+    it "puts them in the merged table of an inline run" do
+      allow(Railbow::Params).to receive(:db_inline?).and_return(true)
+      allow(Railbow::Params).to receive(:since).and_return("90d")
+      allow(Railbow::Params).to receive(:since_min).and_return(0)
+      branch_adds("20260101000004_x.rb")
+
+      recent = pool_double(name: "primary",
+        statuses: [["up", Time.now.strftime("%Y%m%d%H%M%S"), "Add Apples"]])
+      output = run([recent, log])
+      expect(output.lines.find { |l| l.include?("Add Dates") }).to include("● log")
+      expect(output).not_to include("Add Bananas")
+    end
+  end
+
   describe "RBW_DB=inline" do
     before { allow(Railbow::Params).to receive(:db_inline?).and_return(true) }
 

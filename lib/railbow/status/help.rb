@@ -69,7 +69,10 @@ module Railbow
                                      with column widths shared so the tables
                                      line up. Databases sharing a migrations
                                      path (shards) merge into one table with a
-                                     status per database.
+                                     status per database. Migrations your branch
+                                     adds always show, even outside the window,
+                                     and a summarized database lists just those
+                                     (needs RBW_GIT=diff).
                                      focus        - expand only the first
                                                     database, summarizing the
                                                     rest in a line each. A

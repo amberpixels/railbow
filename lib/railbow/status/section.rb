@@ -52,6 +52,8 @@ module Railbow
         @databases = [{name: pool.db_config.name, database: pool.db_config.database}]
         @migrations_key = migrations_key_for(pool)
         @entries = {}
+        @all_entries = {}
+        @version_to_file = {}
         @ghosts = {}
         @hidden_count = 0
         @total_count = 0
@@ -82,11 +84,9 @@ module Railbow
       # Folds in another database running the same migration files. Anything
       # already built is discarded.
       def merge!(other)
-        other.entries.each do |version, entry|
-          mine = (@entries[version] ||= {name: entry[:name], statuses: {}})
-          mine[:name] = entry[:name] if mine[:name].include?(NO_FILE)
-          mine[:statuses].merge!(entry[:statuses])
-        end
+        merge_entries(@entries, other.entries)
+        merge_entries(@all_entries, other.all_entries)
+        @version_to_file = other.version_to_file.merge(@version_to_file)
         @databases.concat(other.databases)
         @fallback_output = [fallback_output, other.fallback_output].compact.join
         @ghosts = other.ghosts.merge(@ghosts)
@@ -102,6 +102,57 @@ module Railbow
 
       def sharded?
         databases.size > 1
+      end
+
+      # Versions the checked-out branch adds to this database, wherever they
+      # fall relative to the time window. Needs RBW_GIT=diff, which is what
+      # already makes railbow branch-aware.
+      def branch_versions
+        return @branch_versions if @branch_versions
+        return @branch_versions = [] unless Railbow::Params.git_diff?
+
+        files = GitData.branch_files(migrations_key, base_override: Railbow::Params.git_base)
+        @branch_versions = @all_entries.keys.select do |version|
+          file = version_to_file[version]
+          file && files.include?(File.basename(file))
+        end.sort
+      end
+
+      # Adds the branch's migrations the time window left out, so a drawn
+      # table never hides your own work.
+      def include_branch!
+        missing = branch_versions - @entries.keys
+        return self if missing.empty?
+
+        @entries = @entries.merge(@all_entries.slice(*missing))
+        @hidden_count -= missing.size
+        reset_built
+        self
+      end
+
+      # Keeps only the branch's migrations, for a database that would otherwise
+      # collapse to a summary line.
+      def narrow_to_branch!
+        @entries = @all_entries.slice(*branch_versions)
+        @hidden_count = total_count - @entries.size
+        @floor_applied = false
+        @branch_only = true
+        reset_built
+        self
+      end
+
+      def branch_only?
+        @branch_only == true
+      end
+
+      # Pending migrations not among the rows drawn. A narrowed section still
+      # owes the reader what its summary line would have said.
+      def hidden_pending_count
+        pending_count - entries.count { |_, e| e[:statuses].value?("down") }
+      end
+
+      def hidden_ghost_count
+        ghost_count - entries.count { |_, e| e[:name].to_s.include?(NO_FILE) }
       end
 
       # Answered from collected entries, so it costs no git work: it is asked
@@ -129,6 +180,12 @@ module Railbow
       end
 
       attr_reader :latest_applied_version
+
+      protected
+
+      attr_reader :all_entries, :version_to_file
+
+      public
 
       def latest_applied_date
         version_date(latest_applied_version) if latest_applied_version
@@ -166,7 +223,7 @@ module Railbow
 
       private
 
-      attr_reader :formatter, :git, :version_to_file
+      attr_reader :formatter, :git
 
       def migrations_key_for(pool)
         paths = Array(pool.migration_context.migrations_paths)
@@ -181,6 +238,20 @@ module Railbow
         @built = false
       end
 
+      def merge_entries(into, from)
+        from.each do |version, entry|
+          mine = (into[version] ||= {name: entry[:name], statuses: {}})
+          mine[:name] = entry[:name] if mine[:name].include?(NO_FILE)
+          mine[:statuses].merge!(entry[:statuses])
+        end
+      end
+
+      def entries_for(db_list)
+        db_list.to_h do |status, version, name|
+          [version.to_s, {name: name, statuses: {db_name => status}}]
+        end
+      end
+
       def collect(pool)
         db_list = pool.migration_context.migrations_status
         @total_count = db_list.size
@@ -191,22 +262,20 @@ module Railbow
           return
         end
 
+        # The whole list, unfiltered: a summarized database can still show the
+        # branch's migrations, and those may sit outside the window.
+        @all_entries = entries_for(db_list)
+        pool.migration_context.migrations.each do |m|
+          @version_to_file[m.version.to_s] = m.filename
+        end
+
         db_list = apply_since_filter(db_list)
 
         # State tracks recency, not row count: a section whose only rows were
         # pulled in by the floor still has nothing recent to say, and should
         # still collapse in a multi-database run.
         @state = @window_count.zero? ? :none_in_period : :ok
-        return if db_list.empty?
-
-        @entries = db_list.to_h do |status, version, name|
-          [version.to_s, {name: name, statuses: {db_name => status}}]
-        end
-
-        @version_to_file = {}
-        pool.migration_context.migrations.each do |m|
-          @version_to_file[m.version.to_s] = m.filename
-        end
+        @entries = entries_for(db_list)
       end
 
       # Counted over every migration, not just the ones in the window, so a
@@ -287,8 +356,9 @@ module Railbow
         @tables_enabled = Railbow::Params.view_tables?
       end
 
-      # Git lookups and ghost recovery happen here rather than during collect,
-      # so a section that ends up collapsed never pays for them.
+      # Git history lookups and ghost recovery happen here rather than during
+      # collect, so a section that ends up collapsed never pays for them. It
+      # pays only the cheap branch lookup (#branch_versions).
       def build!
         @built = true
         @columns = []

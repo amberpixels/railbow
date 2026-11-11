@@ -29,6 +29,7 @@ module Railbow
       def print
         return print_solo(sections.first) if solo?
 
+        apply_branch_rows
         print_overview
         Railbow::Params.db_inline? ? print_inline : print_sections
         print_skipped
@@ -202,11 +203,22 @@ module Railbow
         puts formatter.dim("#{COLLAPSED} #{count_label(skipped.size, "database")} hidden: #{skipped.join(", ")}")
       end
 
+      # Your own migrations show up whichever database they target and however
+      # old they are: a drawn table gains the ones the time window left out, and
+      # a database that would collapse keeps a table of just those.
+      def apply_branch_rows
+        sections.each do |section|
+          next if section.branch_versions.empty?
+
+          collapse?(section) ? section.narrow_to_branch! : section.include_branch!
+        end
+      end
+
       # A quiet database has no table to draw, so one line says it all.
       # RBW_DB=focus collapses all but the first database too, unless one has
       # migrations pending.
       def collapse?(section)
-        return false if Railbow::Params.db_full?
+        return false if Railbow::Params.db_full? || section.branch_only?
         return true if section.quiet?
         # Focus would empty the inline table of every database but the first.
         return false if Railbow::Params.db_inline?
@@ -241,13 +253,29 @@ module Railbow
         end
       end
 
+      # What a narrowed section's summary line would have warned about: pending
+      # or ghost migrations among the rows it does not draw.
+      def hidden_outside(section)
+        parts = []
+        parts << "#{section.hidden_pending_count} pending" if section.hidden_pending_count > 0
+        parts << count_label(section.hidden_ghost_count, "ghost") if section.hidden_ghost_count > 0
+        return nil if parts.empty?
+
+        "#{parts.join(", ")} outside the #{section.since_value} window - RBW_SINCE=all"
+      end
+
       # "──── primary · pawshop-dev ──── 12 of 240 ────", ruled out to where
       # the last column starts so it frames the table rather than floating.
       def section_header(section, rule_width)
         label = section.db_names.join(" + ")
         detail = section.sharded? ? shared_path(section) : section.database
         head = "#{RULE * 4} #{label} · #{detail} "
-        head += "#{RULE * 4} #{shown_count(section)} of #{section.total_count} " if section.hidden_count > 0
+        if section.branch_only?
+          head += "#{RULE * 4} #{section.rows.size} on this branch of #{section.total_count} "
+          head += "#{RULE * 4} #{hidden_outside(section)} " if hidden_outside(section)
+        elsif section.hidden_count > 0
+          head += "#{RULE * 4} #{shown_count(section)} of #{section.total_count} "
+        end
 
         width = (rule_width > 0) ? rule_width : DEFAULT_RULE_WIDTH
         if (term = terminal_width)

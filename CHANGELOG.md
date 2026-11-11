@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- In a multi-database `db:migrate:status`, the migrations your branch adds
+  always show, whichever database they target and even outside the time
+  window. A drawn table gains the ones the window left out. A database that
+  would collapse to a summary line (summarized by `focus`, or quiet) shows a
+  table of just those, with a header like `1 on this branch of 40` that still
+  counts the pending and ghost migrations it hides. "Your branch" means added
+  since the merge-base with the base branch, or added and not committed yet,
+  and needs `diff` in `RBW_GIT` (on by default).
+
 ### Fixed
 
 - The `⎇` branch badge in `db:migrate:status` now appears for a migration

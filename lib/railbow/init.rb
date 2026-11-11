@@ -67,6 +67,8 @@ module Railbow
       # Multi-database runs (comma-separated). Leave empty ("") to expand every
       # database into its own section, in database.yml order; a database with
       # nothing in the time window collapses to a one-line summary either way.
+      # Migrations your branch adds always show, even outside the window, and a
+      # database that would be summarized lists just those (git: diff).
       #   focus       - expand only the first database, summarizing the rest.
       #                 A database with migrations pending is always expanded
       #   only:<name> - render only this database (repeatable)

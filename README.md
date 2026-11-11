@@ -171,6 +171,23 @@ in full and every other one is summarized in a line each (`db: focus`).
 run is. The summary exists to hide what needs no action, and pending work is
 the opposite of that.
 
+**Your branch's migrations always show**, whichever database they target and
+however old they are. These are the migrations the checked-out branch adds:
+committed since the merge-base with the base branch, or added and not committed
+yet. A drawn table gains the ones the time window left out, and a database that
+would be summarized keeps a table of just those. Its header still counts the
+pending and ghost migrations the summary line would have named:
+
+```
+──── primary · myapp_development ──── 12 of 240 ────────────────────────
+ ↑↑  │ 20260721130000 │ 2026-07-21 13:00:00 │ Partition visit reminders    ● visit_reminders
+
+──── log · log_development ──── 1 on this branch of 40 ──── 2 pending outside the 90d window - RBW_SINCE=all ────
+ ↑↑  │ 20260801100000 │ 2026-08-01 10:00:00 │ Add source to visit logs     ● visit_logs
+```
+
+This needs `diff` in `RBW_GIT`, which the default has.
+
 Setting `db` to an empty value expands every database that has recent activity,
 each as its own section with column widths shared so the tables line up:
 

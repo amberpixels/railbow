@@ -43,6 +43,120 @@ module Railbow
         cache[[migrate_dir, opts]] ||= new(migrate_dir: migrate_dir, **opts)
       end
 
+      # Basenames of the migrations the checked-out branch adds over its base:
+      # committed since the merge-base, or added and not committed yet. Much
+      # cheaper than a full instance (no history walk, no origin lookup), so a
+      # database that is otherwise only summarized can afford to ask.
+      def self.branch_files(paths, base_override: "")
+        run_cached([:branch_files, paths, base_override]) do
+          files = Set.new(committed_branch_paths(paths, base_override).map { |f| File.basename(f) })
+          files.merge(uncommitted_files(paths, additions_only: true))
+        end
+      end
+
+      # Paths of the migrations committed on this branch since it left its
+      # base. Shared with the origin badge, so the badge and the branch rows
+      # agree on which migrations are the branch's.
+      def self.committed_branch_paths(paths, base_override)
+        merge_base = run_cached([:merge_base, base_override]) do
+          out, status = Railbow::GitUtils.capture2("merge-base", "HEAD", default_branch(base_override))
+          status.success? ? out.strip : nil
+        end
+        return [] unless merge_base
+
+        diff_out, diff_status = Railbow::GitUtils.capture2(
+          "diff", "--name-status", "--diff-filter=AR", merge_base, "HEAD", "--", *paths
+        )
+        return [] unless diff_status.success?
+
+        diff_out.each_line.filter_map { |l| name_status_path(l.strip) }
+      end
+
+      # Memoized for the rest of a multi-database run, so per-database calls
+      # share what does not depend on the database. Outside a run, no cache.
+      def self.run_cached(key)
+        cache = Railbow::MultiDb.current&.git_cache
+        return yield unless cache
+        return cache[key] if cache.key?(key)
+
+        cache[key] = yield
+      end
+
+      def self.default_branch(override)
+        return override if override && !override.empty?
+
+        run_cached([:default_branch]) { detect_default_branch }
+      end
+
+      def self.detect_default_branch
+        output, status = Railbow::GitUtils.capture2("symbolic-ref", "refs/remotes/origin/HEAD")
+        if status.success?
+          branch = output.strip.sub(%r{^refs/remotes/origin/}, "")
+          return branch unless branch.empty?
+        end
+
+        %w[main master].each do |candidate|
+          _, st = Railbow::GitUtils.capture2("rev-parse", "--verify", "refs/heads/#{candidate}")
+          return candidate if st.success?
+        end
+
+        "main"
+      end
+
+      # --name-status lines are "A\tfilepath" or "Rnnn\told\tnew"; a rename
+      # attributes to its destination.
+      def self.name_status_path(line)
+        cols = line.split("\t")
+        filepath = cols[0]&.start_with?("R") ? cols[2] : cols[1]
+        (filepath.nil? || filepath.empty?) ? nil : filepath
+      end
+
+      def self.name_status_basename(line)
+        filepath = name_status_path(line)
+        filepath && File.basename(filepath)
+      end
+
+      # A staged edit ("M ") belongs to the current branch for the badge, but
+      # with additions_only it is not a migration the branch adds: an edit to
+      # an old migration would otherwise count until it is committed.
+      def self.uncommitted_files(paths, additions_only: false)
+        output, status = Railbow::GitUtils.capture2("status", "--porcelain", "--", *paths)
+        return Set.new unless status.success?
+
+        result = Set.new
+        output.each_line do |line|
+          code = line[0..1]
+
+          if code[0] == "R"
+            # Rename: "R  old -> new" or "R100 old -> new". Take the destination.
+            parts = line[3..].split(" -> ", 2)
+            filepath = (parts[1] || parts[0]).strip
+          elsif ["??", "A ", "AM"].include?(code) || (code == "M " && !additions_only)
+            filepath = line[3..].strip
+          else
+            next
+          end
+
+          result << File.basename(filepath) unless filepath.empty?
+        end
+
+        # During an in-progress merge, files from MERGE_HEAD (e.g. main) show up
+        # as staged additions. Exclude them so they are not tagged as ours.
+        result - incoming_merge_files(paths)
+      end
+
+      def self.incoming_merge_files(paths)
+        merging = run_cached([:merging]) { Railbow::GitUtils.capture3("rev-parse", "MERGE_HEAD")[2].success? }
+        return Set.new unless merging
+
+        output, _, status = Railbow::GitUtils.capture3(
+          "diff", "--name-only", "--diff-filter=AR", "HEAD", "MERGE_HEAD", "--", *paths
+        )
+        return Set.new unless status.success?
+
+        Set.new(output.each_line.map { |l| File.basename(l.strip) }.reject(&:empty?))
+      end
+
       # Extracts a display label from a branch name. "auto" uses the built-in
       # ticket pattern; anything else is a regex whose first capture wins.
       def self.apply_branch_mask(branch, branch_mask)
@@ -145,12 +259,8 @@ module Railbow
         dates
       end
 
-      # --name-status lines are "A\tfilepath" or "Rnnn\told\tnew"; a rename
-      # attributes to its destination.
       def name_status_basename(line)
-        cols = line.split("\t")
-        filepath = cols[0]&.start_with?("R") ? cols[2] : cols[1]
-        filepath ? File.basename(filepath) : nil
+        self.class.name_status_basename(line)
       end
 
       def current_git_email
@@ -171,36 +281,11 @@ module Railbow
       end
 
       def detect_default_branch(override)
-        return override if override && !override.empty?
-
-        output, status = Railbow::GitUtils.capture2("symbolic-ref", "refs/remotes/origin/HEAD")
-        if status.success?
-          branch = output.strip.sub(%r{^refs/remotes/origin/}, "")
-          return branch unless branch.empty?
-        end
-
-        %w[main master].each do |candidate|
-          _, st = Railbow::GitUtils.capture2("rev-parse", "--verify", "refs/heads/#{candidate}")
-          return candidate if st.success?
-        end
-
-        "main"
+        self.class.default_branch(override)
       end
 
       def branch_migration_origins(base_branch, branch_mask)
-        merge_base_out, mb_status = Railbow::GitUtils.capture2("merge-base", "HEAD", base_branch)
-        return {} unless mb_status.success?
-
-        merge_base = merge_base_out.strip
-        diff_out, diff_status = Railbow::GitUtils.capture2(
-          "diff", "--name-status", "--diff-filter=AR", merge_base, "HEAD", "--", migrate_dir
-        )
-        return {} unless diff_status.success?
-
-        files = diff_out.each_line.map { |l|
-          cols = l.strip.split("\t")
-          cols[0]&.start_with?("R") ? cols[2] : cols[1]
-        }.compact.reject(&:empty?)
+        files = self.class.committed_branch_paths([migrate_dir], base_branch)
         origins = {}
 
         files.each do |filepath|
@@ -273,29 +358,7 @@ module Railbow
       end
 
       def uncommitted_migration_files
-        output, status = Railbow::GitUtils.capture2("status", "--porcelain", "--", migrate_dir)
-        return Set.new unless status.success?
-
-        result = Set.new
-        output.each_line do |line|
-          code = line[0..1]
-
-          if code[0] == "R"
-            # Rename: "R  old -> new" or "R100 old -> new". Take the destination.
-            parts = line[3..].split(" -> ", 2)
-            filepath = (parts[1] || parts[0]).strip
-          elsif ["??", "A ", "AM", "M "].include?(code)
-            filepath = line[3..].strip
-          else
-            next
-          end
-
-          result << File.basename(filepath) unless filepath.empty?
-        end
-
-        # During an in-progress merge, files from MERGE_HEAD (e.g. main) show up
-        # as staged additions. Exclude them so they are not tagged as ours.
-        result - incoming_merge_files_from_git
+        self.class.uncommitted_files([migrate_dir])
       end
 
       def detect_merge_source_label(branch_mask)
@@ -318,15 +381,7 @@ module Railbow
       end
 
       def incoming_merge_files_from_git
-        _, _, mh_status = Railbow::GitUtils.capture3("rev-parse", "MERGE_HEAD")
-        return Set.new unless mh_status.success?
-
-        output, _, status = Railbow::GitUtils.capture3(
-          "diff", "--name-only", "--diff-filter=AR", "HEAD", "MERGE_HEAD", "--", migrate_dir
-        )
-        return Set.new unless status.success?
-
-        Set.new(output.each_line.map { |l| File.basename(l.strip) }.reject(&:empty?))
+        self.class.incoming_merge_files([migrate_dir])
       end
     end
   end
