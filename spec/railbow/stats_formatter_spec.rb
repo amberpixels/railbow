@@ -7,13 +7,24 @@ require "rails/code_statistics"
 require "railbow/stats_formatter"
 
 RSpec.describe Railbow::StatsFormatter do
-  # A subclass, so the real Rails::CodeStatistics stays untouched for other
-  # specs while super still reaches the stock table.
+  # Rails 8 namespaces both classes under Rails::, Rails 7.2 has them top-level.
+  let(:stats_class) { defined?(Rails::CodeStatistics) ? Rails::CodeStatistics : ::CodeStatistics }
+  let(:calculator_class) do
+    defined?(Rails::CodeStatisticsCalculator) ? Rails::CodeStatisticsCalculator : ::CodeStatisticsCalculator
+  end
+
+  # A subclass, so the real CodeStatistics stays untouched for other specs
+  # while super still reaches the stock table.
   let(:klass) do
-    Class.new(Rails::CodeStatistics) do
+    Class.new(stats_class) do
       prepend Railbow::StatsFormatter
 
-      self.test_types = test_types + ["Model specs"]
+      # Rails 8 keeps test types in a class attribute, Rails 7.2 in a constant.
+      if respond_to?(:test_types)
+        self.test_types = test_types + ["Model specs"]
+      else
+        const_set(:TEST_TYPES, superclass::TEST_TYPES + ["Model specs"])
+      end
     end
   end
 
@@ -29,7 +40,7 @@ RSpec.describe Railbow::StatsFormatter do
   def build(data)
     klass.allocate.tap do |stats|
       stats.instance_variable_set(:@pairs, data.keys.map { |name| [name, "/srv/pawshop"] })
-      stats.instance_variable_set(:@statistics, data.transform_values { |v| Rails::CodeStatisticsCalculator.new(*v) })
+      stats.instance_variable_set(:@statistics, data.transform_values { |v| calculator_class.new(*v) })
       stats.instance_variable_set(:@total, nil)
     end
   end
