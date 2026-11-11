@@ -291,4 +291,95 @@ RSpec.describe Railbow::MigrationParser do
       expect(described_class.extract_tables_from_content(content)).to eq([])
     end
   end
+
+  describe "schema-qualified tables" do
+    def tables(content)
+      described_class.extract_tables_from_content(content)
+    end
+
+    it "keeps the schema of a table named in the DSL" do
+      expect(tables('add_column "reporting.events", :region_id, :integer')).to eq(["reporting.events"])
+    end
+
+    it "keeps the schema on both sides of a foreign key" do
+      content = 'add_foreign_key "reporting.events", "reporting.regions"'
+      expect(tables(content)).to contain_exactly("reporting.events", "reporting.regions")
+    end
+
+    it "reads a single-quoted table name" do
+      expect(tables("add_column 'reporting.events', :region_id, :integer")).to eq(["reporting.events"])
+      expect(tables("add_foreign_key 'orders', 'users'")).to contain_exactly("orders", "users")
+    end
+
+    it "does not repeat a schema-qualified table for a model of the same table" do
+      content = <<~RUBY
+        add_column "reporting.events", :region_id, :integer
+        Reporting::Event.update_all(region_id: 1)
+      RUBY
+      expect(tables(content)).to eq(["reporting.events"])
+    end
+
+    it "keeps the schema of a table named by keyword" do
+      expect(tables('partition_monthly(table: "reporting.events")')).to eq(["reporting.events"])
+    end
+
+    it "leaves a method call on a keyword value out of the name" do
+      expect(tables("partition_monthly(table: apples.to_s)")).to eq(["apples"])
+    end
+
+    it "keeps the schema of a table named in SQL" do
+      expect(tables('execute "ALTER TABLE reporting.events ADD COLUMN x int"')).to eq(["reporting.events"])
+    end
+
+    it "reads a quoted schema and table in SQL" do
+      content = %q(execute 'UPDATE "reporting"."events" SET region_id = 1')
+      expect(tables(content)).to eq(["reporting.events"])
+    end
+
+    it "reads quotes escaped inside a Ruby string" do
+      content = 'execute "DELETE FROM \\"reporting\\".\\"events\\""'
+      expect(tables(content)).to eq(["reporting.events"])
+    end
+
+    it "shows a table in the public schema by its bare name" do
+      content = <<~RUBY
+        add_column "public.events", :region_id, :integer
+        execute "UPDATE public.events SET region_id = 1"
+      RUBY
+      expect(tables(content)).to eq(["events"])
+    end
+
+    it "does not read a method called on the SQL string as a table" do
+      expect(tables('execute "DELETE FROM events".squish')).to eq(["events"])
+    end
+
+    it "reads ALTER TABLE with IF EXISTS and ONLY" do
+      expect(tables('execute "ALTER TABLE IF EXISTS ONLY reporting.events ADD COLUMN x int"')).to eq(["reporting.events"])
+    end
+  end
+
+  describe "indexes and views in SQL" do
+    def tables(content)
+      described_class.extract_tables_from_content(content)
+    end
+
+    it "reads the table of CREATE INDEX ... ON ONLY" do
+      content = 'execute "CREATE INDEX idx ON ONLY reporting.events (created_at)"'
+      expect(tables(content)).to eq(["reporting.events"])
+    end
+
+    it "reads the table of a unique concurrent index" do
+      content = 'execute "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_apples_on_name ON apples (name)"'
+      expect(tables(content)).to eq(["apples"])
+    end
+
+    it "reads the name of a view" do
+      expect(tables('execute "CREATE VIEW reporting.daily AS SELECT 1"')).to eq(["reporting.daily"])
+    end
+
+    it "reads the name of a replaced materialized view" do
+      content = 'execute "CREATE OR REPLACE MATERIALIZED VIEW daily_totals AS SELECT 1"'
+      expect(tables(content)).to eq(["daily_totals"])
+    end
+  end
 end

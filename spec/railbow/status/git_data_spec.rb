@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "fileutils"
+require "open3"
+require "tmpdir"
 require "railbow/status/git_data"
 
 RSpec.describe Railbow::Status::GitData do
@@ -172,6 +175,180 @@ RSpec.describe Railbow::Status::GitData do
         expect(git.branch_origins).to be_empty
         expect(branch_queries).to be_empty
       end
+    end
+  end
+
+  describe "uncommitted files" do
+    let(:ok) { instance_double(Process::Status, success?: true) }
+    let(:failed) { instance_double(Process::Status, success?: false) }
+    let(:widgets) { "20261111003117_create_widgets.rb" }
+    let(:gadgets) { "20261111135204_create_gadgets.rb" }
+    let(:porcelain) { "" }
+    let(:base_tree) { "db/migrate/#{widgets}\n" }
+    let(:merge_base) { ["base000\n", ok] }
+
+    # `status --porcelain` compares the tree with HEAD; the merge-base's own
+    # file list is what tells a new file from one the base branch already has.
+    before do
+      allow(Railbow::GitUtils).to receive(:capture2) do |*args|
+        case args
+        in ["symbolic-ref", *] then ["refs/remotes/origin/main\n", ok]
+        in ["merge-base", "HEAD", "main"] then merge_base
+        in ["ls-tree", "-r", "--name-only", "base000", "--", "db/migrate"] then [base_tree, ok]
+        in ["diff", "--name-status", *] then ["", ok]
+        in ["rev-parse", "--abbrev-ref", "HEAD"] then ["feature-x\n", ok]
+        in ["status", "--porcelain", *] then [porcelain, ok]
+        else ["", failed]
+        end
+      end
+      allow(Railbow::GitUtils).to receive(:capture3).and_return(["", "", failed])
+    end
+
+    subject(:git) do
+      described_class.new(migrate_dir: "db/migrate", author_enabled: false, diff_enabled: true)
+    end
+
+    def branch_files
+      described_class.branch_files(["db/migrate"])
+    end
+
+    context "when a rename back to a base-branch filename is staged" do
+      let(:porcelain) { "R  db/migrate/20261111135205_create_widgets.rb -> db/migrate/#{widgets}\n" }
+
+      it "does not attribute the file to the current branch" do
+        expect(git.branch_origins).not_to have_key(widgets)
+        expect(branch_files).not_to include(widgets)
+      end
+
+      it "still reports the file as uncommitted" do
+        expect(git.uncommitted_files).to include(widgets)
+      end
+    end
+
+    context "when a rename back to a base-branch filename is not staged" do
+      let(:porcelain) { " D db/migrate/20261111135205_create_widgets.rb\n?? db/migrate/#{widgets}\n" }
+
+      it "does not attribute the file to the current branch" do
+        expect(git.branch_origins).not_to have_key(widgets)
+        expect(branch_files).not_to include(widgets)
+        expect(git.uncommitted_files).to include(widgets)
+      end
+    end
+
+    context "when a new migration is staged" do
+      let(:porcelain) { "A  db/migrate/#{gadgets}\n" }
+
+      it "attributes it to the current branch" do
+        expect(git.branch_origins).to eq(gadgets => "feature-x")
+        expect(branch_files).to include(gadgets)
+      end
+    end
+
+    context "when a new migration is untracked" do
+      let(:porcelain) { "?? db/migrate/#{gadgets}\n" }
+
+      it "attributes it to the current branch" do
+        expect(git.branch_origins).to eq(gadgets => "feature-x")
+        expect(branch_files).to include(gadgets)
+      end
+    end
+
+    context "when an edit to an existing migration is staged" do
+      let(:porcelain) { "M  db/migrate/#{widgets}\n" }
+
+      it "badges the file but does not count it as added by the branch" do
+        expect(git.branch_origins).to eq(widgets => "feature-x")
+        expect(branch_files).to be_empty
+        expect(Railbow::GitUtils).not_to have_received(:capture2).with("ls-tree", any_args)
+      end
+    end
+
+    context "when there is no merge-base to compare with" do
+      let(:porcelain) { "A  db/migrate/#{gadgets}\n?? db/migrate/#{widgets}\n" }
+      let(:merge_base) { ["", failed] }
+
+      it "counts every new file, as there is nothing to compare against" do
+        expect(git.branch_origins).to eq(gadgets => "feature-x", widgets => "feature-x")
+        expect(branch_files).to include(gadgets, widgets)
+      end
+    end
+  end
+
+  # Real git, no stubs: the fix rests on what git itself reports once a
+  # base-branch migration, renamed while merging, is renamed back.
+  describe "in a repository where a merged-in migration was renamed" do
+    let(:widgets) { "20261111003117_create_widgets.rb" }
+    let(:renamed) { "20261111135205_create_widgets.rb" }
+    let(:gadgets) { "20261111135204_create_gadgets.rb" }
+
+    def git!(*args)
+      out, status = Open3.capture2e(
+        "git", "-c", "user.name=Tester", "-c", "user.email=tester@example.test",
+        "-c", "commit.gpgsign=false", *args
+      )
+      raise "git #{args.join(" ")} failed: #{out}" unless status.success?
+    end
+
+    def commit_file(name, message)
+      File.write("db/migrate/#{name}", "# #{name}\n")
+      git!("add", "db/migrate/#{name}")
+      git!("commit", "-q", "-m", message)
+    end
+
+    around do |example|
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) do
+          git!("init", "-q", "-b", "main", ".")
+          git!("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+          FileUtils.mkdir_p("db/migrate")
+          commit_file("20260101000000_create_apples.rb", "apples")
+          git!("checkout", "-q", "-b", "feature-x")
+          commit_file(gadgets, "gadgets")
+          git!("checkout", "-q", "main")
+          commit_file(widgets, "widgets")
+          git!("checkout", "-q", "feature-x")
+          git!("merge", "-q", "--no-commit", "--no-ff", "main")
+          git!("mv", "db/migrate/#{widgets}", "db/migrate/#{renamed}")
+          git!("commit", "-q", "-m", "merge main")
+          example.run
+        end
+      end
+    end
+
+    subject(:git) do
+      described_class.new(migrate_dir: "db/migrate", author_enabled: false, diff_enabled: true)
+    end
+
+    def branch_files
+      described_class.branch_files(["db/migrate"])
+    end
+
+    it "leaves a staged rename back to the base filename off the branch" do
+      git!("mv", "db/migrate/#{renamed}", "db/migrate/#{widgets}")
+
+      expect(git.branch_origins).not_to have_key(widgets)
+      expect(git.branch_origins).to have_key(gadgets)
+      expect(branch_files).not_to include(widgets)
+      expect(git.uncommitted_files).to include(widgets)
+    end
+
+    it "leaves an unstaged rename back to the base filename off the branch" do
+      File.rename("db/migrate/#{renamed}", "db/migrate/#{widgets}")
+
+      expect(git.branch_origins).not_to have_key(widgets)
+      expect(branch_files).not_to include(widgets)
+      expect(git.uncommitted_files).to include(widgets)
+    end
+
+    it "keeps a new uncommitted migration on the branch, staged or not" do
+      File.write("db/migrate/20261111140000_create_pears.rb", "# pears\n")
+      File.write("db/migrate/20261111150000_create_plums.rb", "# plums\n")
+      git!("add", "db/migrate/20261111140000_create_pears.rb")
+
+      expect(git.branch_origins).to include(
+        "20261111140000_create_pears.rb" => "feature-x",
+        "20261111150000_create_plums.rb" => "feature-x"
+      )
     end
   end
 end
