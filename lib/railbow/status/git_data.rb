@@ -13,6 +13,7 @@ module Railbow
     # authors, landing dates, originating branches and uncommitted files.
     class GitData
       EMPTY_AUTHORS = {names: {}, emails: {}}.freeze
+      PORCELAIN_KINDS = {"??" => :untracked, "A " => :added, "AM" => :added, "M " => :edited}.freeze
 
       attr_reader :migrate_dir, :author_names, :author_emails, :landed_dates,
         :git_email, :git_name, :branch_origins, :uncommitted_files,
@@ -50,7 +51,7 @@ module Railbow
       def self.branch_files(paths, base_override: "")
         run_cached([:branch_files, paths, base_override]) do
           files = Set.new(committed_branch_paths(paths, base_override).map { |f| File.basename(f) })
-          files.merge(uncommitted_files(paths, additions_only: true))
+          files.merge(uncommitted_branch_files(paths, base_override: base_override, additions_only: true))
         end
       end
 
@@ -58,10 +59,7 @@ module Railbow
       # base. Shared with the origin badge, so the badge and the branch rows
       # agree on which migrations are the branch's.
       def self.committed_branch_paths(paths, base_override)
-        merge_base = run_cached([:merge_base, base_override]) do
-          out, status = Railbow::GitUtils.capture2("merge-base", "HEAD", default_branch(base_override))
-          status.success? ? out.strip : nil
-        end
+        merge_base = merge_base(base_override)
         return [] unless merge_base
 
         diff_out, diff_status = Railbow::GitUtils.capture2(
@@ -70,6 +68,13 @@ module Railbow
         return [] unless diff_status.success?
 
         diff_out.each_line.filter_map { |l| name_status_path(l.strip) }
+      end
+
+      def self.merge_base(base_override)
+        run_cached([:merge_base, base_override]) do
+          out, status = Railbow::GitUtils.capture2("merge-base", "HEAD", default_branch(base_override))
+          status.success? ? out.strip : nil
+        end
       end
 
       # Memoized for the rest of a multi-database run, so per-database calls
@@ -116,33 +121,73 @@ module Railbow
         filepath && File.basename(filepath)
       end
 
-      # A staged edit ("M ") belongs to the current branch for the badge, but
-      # with additions_only it is not a migration the branch adds: an edit to
-      # an old migration would otherwise count until it is committed.
-      def self.uncommitted_files(paths, additions_only: false)
-        output, status = Railbow::GitUtils.capture2("status", "--porcelain", "--", *paths)
-        return Set.new unless status.success?
+      # Every migration with an uncommitted change, whoever it belongs to.
+      # Files an in-progress merge brings in from MERGE_HEAD show up as staged
+      # additions, so they are left out.
+      def self.uncommitted_files(paths, entries: porcelain_entries(paths))
+        Set.new(entries.map(&:last)) - incoming_merge_files(paths)
+      end
 
-        result = Set.new
-        output.each_line do |line|
+      # The uncommitted migrations that are the branch's own work. A staged
+      # addition or rename counts only when it is new over the merge-base:
+      # renaming a base-branch migration back to its own name is staged against
+      # HEAD, but adds nothing to the branch. A staged edit belongs to the
+      # branch for the badge, but with additions_only it is not a migration the
+      # branch adds.
+      def self.uncommitted_branch_files(paths, base_override: "", additions_only: false, entries: porcelain_entries(paths))
+        over_base = staged_over_base(paths, base_override) if entries.any? { |kind, _| kind == :added }
+
+        mine = entries.filter_map do |kind, basename|
+          keep =
+            case kind
+            when :untracked then true
+            when :edited then !additions_only
+            # Without a merge-base there is nothing to compare against.
+            when :added then over_base.nil? || over_base.include?(basename)
+            end
+          basename if keep
+        end
+
+        Set.new(mine) - incoming_merge_files(paths)
+      end
+
+      # [kind, basename] per `git status --porcelain` line worth knowing about:
+      # :untracked, :added (staged addition or rename) or :edited (staged edit).
+      def self.porcelain_entries(paths)
+        output, status = Railbow::GitUtils.capture2("status", "--porcelain", "--", *paths)
+        return [] unless status.success?
+
+        output.each_line.filter_map do |line|
           code = line[0..1]
 
           if code[0] == "R"
-            # Rename: "R  old -> new" or "R100 old -> new". Take the destination.
+            # Rename: "R  old -> new". Take the destination.
             parts = line[3..].split(" -> ", 2)
+            kind = :added
             filepath = (parts[1] || parts[0]).strip
-          elsif ["??", "A ", "AM"].include?(code) || (code == "M " && !additions_only)
-            filepath = line[3..].strip
           else
-            next
+            kind = PORCELAIN_KINDS[code]
+            next unless kind
+
+            filepath = line[3..].strip
           end
 
-          result << File.basename(filepath) unless filepath.empty?
+          [kind, File.basename(filepath)] unless filepath.empty?
         end
+      end
 
-        # During an in-progress merge, files from MERGE_HEAD (e.g. main) show up
-        # as staged additions. Exclude them so they are not tagged as ours.
-        result - incoming_merge_files(paths)
+      # Basenames the index adds over the merge-base, or nil when there is no
+      # merge-base to compare with.
+      def self.staged_over_base(paths, base_override)
+        merge_base = merge_base(base_override)
+        return nil unless merge_base
+
+        out, status = Railbow::GitUtils.capture2(
+          "diff", "--cached", "--name-status", "--diff-filter=AR", merge_base, "--", *paths
+        )
+        return nil unless status.success?
+
+        Set.new(out.each_line.filter_map { |l| name_status_basename(l.strip) })
       end
 
       def self.incoming_merge_files(paths)
@@ -198,12 +243,16 @@ module Railbow
         @branch_origins = branch_migration_origins(base_branch, branch_mask)
         @incoming_merge_files = incoming_merge_files_from_git
         @merge_source_label = detect_merge_source_label(branch_mask) if @incoming_merge_files.any?
-        @uncommitted_files = uncommitted_migration_files
+        entries = self.class.porcelain_entries([migrate_dir])
+        @uncommitted_files = self.class.uncommitted_files([migrate_dir], entries: entries)
 
-        # Uncommitted files have no commit to attribute, so they belong to
-        # whatever branch is checked out right now.
+        # The branch's uncommitted files have no commit to attribute, so they
+        # belong to whatever branch is checked out right now.
+        mine = self.class.uncommitted_branch_files([migrate_dir], base_override: base_branch, entries: entries)
+        return if mine.empty?
+
         current_branch = current_branch_name(branch_mask)
-        @uncommitted_files.each { |f| @branch_origins[f] ||= current_branch }
+        mine.each { |f| @branch_origins[f] ||= current_branch }
       end
 
       def migration_authors
@@ -355,10 +404,6 @@ module Railbow
           count_out, _ = Railbow::GitUtils.capture2("rev-list", "--count", "#{commit}..#{b}")
           count_out.strip.to_i
         end
-      end
-
-      def uncommitted_migration_files
-        self.class.uncommitted_files([migrate_dir])
       end
 
       def detect_merge_source_label(branch_mask)

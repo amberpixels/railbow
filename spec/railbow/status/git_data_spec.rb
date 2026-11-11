@@ -174,4 +174,93 @@ RSpec.describe Railbow::Status::GitData do
       end
     end
   end
+
+  describe "uncommitted files" do
+    let(:ok) { instance_double(Process::Status, success?: true) }
+    let(:failed) { instance_double(Process::Status, success?: false) }
+    let(:widgets) { "20261111003117_create_widgets.rb" }
+    let(:gadgets) { "20261111135204_create_gadgets.rb" }
+    let(:porcelain) { "" }
+    let(:staged_over_base) { "" }
+    let(:merge_base) { ["base000\n", ok] }
+
+    # `status --porcelain` compares the index with HEAD; the cached diff
+    # compares it with the merge-base, which is what makes a file the branch's.
+    before do
+      allow(Railbow::GitUtils).to receive(:capture2) do |*args|
+        case args
+        in ["symbolic-ref", *] then ["refs/remotes/origin/main\n", ok]
+        in ["merge-base", "HEAD", "main"] then merge_base
+        in ["diff", "--cached", "--name-status", "--diff-filter=AR", "base000", "--", "db/migrate"]
+          [staged_over_base, ok]
+        in ["diff", "--name-status", *] then ["", ok]
+        in ["rev-parse", "--abbrev-ref", "HEAD"] then ["feature-x\n", ok]
+        in ["status", "--porcelain", *] then [porcelain, ok]
+        else ["", failed]
+        end
+      end
+      allow(Railbow::GitUtils).to receive(:capture3).and_return(["", "", failed])
+    end
+
+    subject(:git) do
+      described_class.new(migrate_dir: "db/migrate", author_enabled: false, diff_enabled: true)
+    end
+
+    def branch_files
+      described_class.branch_files(["db/migrate"])
+    end
+
+    context "when a rename back to a base-branch filename is staged" do
+      let(:porcelain) { "R  db/migrate/20261111135205_create_widgets.rb -> db/migrate/#{widgets}\n" }
+      let(:staged_over_base) { "A\tdb/migrate/#{gadgets}\n" }
+
+      it "does not attribute the file to the current branch" do
+        expect(git.branch_origins).not_to have_key(widgets)
+        expect(branch_files).not_to include(widgets)
+      end
+
+      it "still reports the file as uncommitted" do
+        expect(git.uncommitted_files).to include(widgets)
+      end
+    end
+
+    context "when a new migration is staged" do
+      let(:porcelain) { "A  db/migrate/#{gadgets}\n" }
+      let(:staged_over_base) { "A\tdb/migrate/#{gadgets}\n" }
+
+      it "attributes it to the current branch" do
+        expect(git.branch_origins).to eq(gadgets => "feature-x")
+        expect(branch_files).to include(gadgets)
+      end
+    end
+
+    context "when a new migration is untracked" do
+      let(:porcelain) { "?? db/migrate/#{gadgets}\n" }
+
+      it "attributes it to the current branch without asking for the staged diff" do
+        expect(git.branch_origins).to eq(gadgets => "feature-x")
+        expect(branch_files).to include(gadgets)
+        expect(Railbow::GitUtils).not_to have_received(:capture2).with("diff", "--cached", any_args)
+      end
+    end
+
+    context "when an edit to an existing migration is staged" do
+      let(:porcelain) { "M  db/migrate/#{widgets}\n" }
+
+      it "badges the file but does not count it as added by the branch" do
+        expect(git.branch_origins).to eq(widgets => "feature-x")
+        expect(branch_files).to be_empty
+      end
+    end
+
+    context "when there is no merge-base to compare with" do
+      let(:porcelain) { "A  db/migrate/#{gadgets}\n" }
+      let(:merge_base) { ["", failed] }
+
+      it "counts every staged addition, as there is nothing to compare against" do
+        expect(git.branch_origins).to eq(gadgets => "feature-x")
+        expect(branch_files).to include(gadgets)
+      end
+    end
+  end
 end

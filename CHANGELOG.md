@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The `⎇` branch badge in `db:migrate:status` no longer appears on a
+  base-branch migration while a rename of it is staged, for example one
+  renamed back to its original timestamp after a merge. A staged addition or
+  rename now counts as the branch's only when it is new over the merge-base,
+  so the staged state and the committed state agree. The same rule keeps such
+  a migration out of a summarized database's "on this branch" table.
+
 ## [0.8.0] - 2026-11-11
 
 ### Added
