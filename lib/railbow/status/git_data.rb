@@ -128,22 +128,21 @@ module Railbow
         Set.new(entries.map(&:last)) - incoming_merge_files(paths)
       end
 
-      # The uncommitted migrations that are the branch's own work. A staged
-      # addition or rename counts only when it is new over the merge-base:
-      # renaming a base-branch migration back to its own name is staged against
+      # The uncommitted migrations that are the branch's own work. A new file,
+      # staged or untracked, counts only when the merge-base does not hold it:
+      # a base-branch migration renamed back to its own name is new against
       # HEAD, but adds nothing to the branch. A staged edit belongs to the
       # branch for the badge, but with additions_only it is not a migration the
       # branch adds.
       def self.uncommitted_branch_files(paths, base_override: "", additions_only: false, entries: porcelain_entries(paths))
-        over_base = staged_over_base(paths, base_override) if entries.any? { |kind, _| kind == :added }
+        in_base = base_files(paths, base_override) if entries.any? { |kind, _| kind != :edited }
 
         mine = entries.filter_map do |kind, basename|
           keep =
             case kind
-            when :untracked then true
             when :edited then !additions_only
             # Without a merge-base there is nothing to compare against.
-            when :added then over_base.nil? || over_base.include?(basename)
+            else in_base.nil? || !in_base.include?(basename)
             end
           basename if keep
         end
@@ -176,18 +175,16 @@ module Railbow
         end
       end
 
-      # Basenames the index adds over the merge-base, or nil when there is no
-      # merge-base to compare with.
-      def self.staged_over_base(paths, base_override)
+      # Basenames of the migrations the merge-base holds, or nil when there is
+      # no merge-base to compare with.
+      def self.base_files(paths, base_override)
         merge_base = merge_base(base_override)
         return nil unless merge_base
 
-        out, status = Railbow::GitUtils.capture2(
-          "diff", "--cached", "--name-status", "--diff-filter=AR", merge_base, "--", *paths
-        )
-        return nil unless status.success?
-
-        Set.new(out.each_line.filter_map { |l| name_status_basename(l.strip) })
+        run_cached([:base_files, merge_base, paths]) do
+          out, status = Railbow::GitUtils.capture2("ls-tree", "-r", "--name-only", merge_base, "--", *paths)
+          status.success? ? Set.new(out.each_line.map { |l| File.basename(l.strip) }) : nil
+        end
       end
 
       def self.incoming_merge_files(paths)

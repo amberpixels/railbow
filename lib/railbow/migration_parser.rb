@@ -23,12 +23,12 @@ module Railbow
 
     # A table argument: a symbol, or a string that may carry a schema. Two
     # captures, one of them nil.
-    TABLE_ARG = /(?::(\w+)|"(#{QUALIFIED_NAME}))/
+    TABLE_ARG = /(?::(\w+)|["'](#{QUALIFIED_NAME}))/
 
     # Dual-table methods are included here too: their first argument is always a
     # table, even when the second is passed as `to_table:` instead of positionally.
     SINGLE_TABLE_PATTERN = /\b(?:#{(SINGLE_TABLE_METHODS + DUAL_TABLE_METHODS).join("|")})\s+#{TABLE_ARG}/
-    DUAL_TABLE_PATTERN = /\b(?:#{DUAL_TABLE_METHODS.join("|")})\s+#{TABLE_ARG}["\s,]+#{TABLE_ARG}/
+    DUAL_TABLE_PATTERN = /\b(?:#{DUAL_TABLE_METHODS.join("|")})\s+#{TABLE_ARG}["'\s,]+#{TABLE_ARG}/
 
     # One part of a SQL name, quoted or bare. The backslash is the one a Ruby
     # string puts before an inner quote. A closing quote is only taken with its
@@ -112,7 +112,8 @@ module Railbow
         content.scan(MODEL_REFERENCE_PATTERN) do |match|
           break if tables.size >= 2
           table = ActiveSupport::Inflector.tableize(match[0].split("::").last)
-          tables << table unless tables.include?(table)
+          # A model has no schema, so it matches a found table of any schema.
+          tables << table unless tables.any? { |found| found.split(".").last == table }
         end
       end
 

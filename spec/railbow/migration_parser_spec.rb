@@ -306,6 +306,19 @@ RSpec.describe Railbow::MigrationParser do
       expect(tables(content)).to contain_exactly("reporting.events", "reporting.regions")
     end
 
+    it "reads a single-quoted table name" do
+      expect(tables("add_column 'reporting.events', :region_id, :integer")).to eq(["reporting.events"])
+      expect(tables("add_foreign_key 'orders', 'users'")).to contain_exactly("orders", "users")
+    end
+
+    it "does not repeat a schema-qualified table for a model of the same table" do
+      content = <<~RUBY
+        add_column "reporting.events", :region_id, :integer
+        Reporting::Event.update_all(region_id: 1)
+      RUBY
+      expect(tables(content)).to eq(["reporting.events"])
+    end
+
     it "keeps the schema of a table named by keyword" do
       expect(tables('partition_monthly(table: "reporting.events")')).to eq(["reporting.events"])
     end
