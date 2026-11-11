@@ -103,7 +103,7 @@ Out of the box you get:
 - **Created At** - timestamp parsed from the migration ID
 - **Landing dates** - `⤻ Mar 04` badge when a migration was merged to main after its creation
 - **Branch badges** - `⎇ PS-142` showing the source branch/ticket
-- **Affected tables** - color-coded table names extracted from migration files
+- **Affected tables** - color-coded table names extracted from migration files (a schema-qualified one shows as `schema.table`)
 - **Time filtering** - only the last 90 days shown by default (`since: 90d`), as a soft limit: never fewer than 10 migrations, however old (`since_min: 10`)
 - **Your migrations highlighted** - rows authored by you are visually distinct
 - **Pending migrations greyed out** - a `down` row keeps its status glyph but loses its colors

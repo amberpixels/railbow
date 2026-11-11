@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rename now counts as the branch's only when it is new over the merge-base,
   so the staged state and the committed state agree. The same rule keeps such
   a migration out of a summarized database's "on this branch" table.
+- The Tables column shows a schema-qualified table as `reporting.events`
+  instead of just the schema, in the migration DSL and in raw SQL, quoted
+  parts included. A table in `public` shows by its bare name.
+- Table detection now reads `CREATE INDEX ... ON [ONLY] <table>`,
+  `CREATE [MATERIALIZED] VIEW <name>` and `ALTER TABLE [IF EXISTS] [ONLY]
+  <table>` in raw SQL, so a migration made only of those no longer shows an
+  empty Tables column.
 
 ## [0.8.0] - 2026-11-11
 

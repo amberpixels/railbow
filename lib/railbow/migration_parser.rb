@@ -18,26 +18,47 @@ module Railbow
       add_foreign_key remove_foreign_key
     ].freeze
 
+    # A table name with an optional schema: `events` or `reporting.events`.
+    QUALIFIED_NAME = '(?:\w+\.)?\w+'
+
+    # A table argument: a symbol, or a string that may carry a schema. Two
+    # captures, one of them nil.
+    TABLE_ARG = /(?::(\w+)|"(#{QUALIFIED_NAME}))/
+
     # Dual-table methods are included here too: their first argument is always a
     # table, even when the second is passed as `to_table:` instead of positionally.
-    SINGLE_TABLE_PATTERN = /\b(?:#{(SINGLE_TABLE_METHODS + DUAL_TABLE_METHODS).join("|")})\s+[:"](\w+)/
-    DUAL_TABLE_PATTERN = /\b(?:#{DUAL_TABLE_METHODS.join("|")})\s+[:"](\w+)["\s,]+[:"](\w+)/
+    SINGLE_TABLE_PATTERN = /\b(?:#{(SINGLE_TABLE_METHODS + DUAL_TABLE_METHODS).join("|")})\s+#{TABLE_ARG}/
+    DUAL_TABLE_PATTERN = /\b(?:#{DUAL_TABLE_METHODS.join("|")})\s+#{TABLE_ARG}["\s,]+#{TABLE_ARG}/
+
+    # One part of a SQL name, quoted or bare. The backslash is the one a Ruby
+    # string puts before an inner quote. A closing quote is only taken with its
+    # opening one, so `"... FROM events".squish` does not read as a schema.
+    SQL_NAME_PART = /(?:\\?["'`]\w+\\?["'`]|\\?["'`]?\w+)/
+    SQL_TABLE = /(#{SQL_NAME_PART}(?:\.#{SQL_NAME_PART})?)/
+    SQL_QUOTING = "\\\\\"'`"
 
     SQL_TABLE_PATTERNS = [
-      /\bUPDATE\s+["']?(\w+)["']?/i,
-      /\bINSERT\s+INTO\s+["']?(\w+)["']?/i,
-      /\bDELETE\s+FROM\s+["']?(\w+)["']?/i,
-      /\bALTER\s+TABLE\s+["']?(\w+)["']?/i,
-      /\bTRUNCATE\s+(?:TABLE\s+)?["']?(\w+)["']?/i,
-      /\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["']?(\w+)["']?/i,
-      /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i
+      /\bUPDATE\s+#{SQL_TABLE}/i,
+      /\bINSERT\s+INTO\s+#{SQL_TABLE}/i,
+      /\bDELETE\s+FROM\s+#{SQL_TABLE}/i,
+      /\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?#{SQL_TABLE}/i,
+      /\bTRUNCATE\s+(?:TABLE\s+)?#{SQL_TABLE}/i,
+      /\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?#{SQL_TABLE}/i,
+      /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?#{SQL_TABLE}/i,
+      # The index name is optional in Postgres, hence the optional word before ON.
+      /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(?:\S+\s+)?ON\s+(?:ONLY\s+)?#{SQL_TABLE}/i,
+      /\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?(?:MATERIALIZED\s+)?VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?#{SQL_TABLE}/i
     ].freeze
 
     # A table named by keyword argument, which catches project-level helpers
     # such as `convert_to_monthly_partitions(table: :apples)` whatever their
     # name. Not bare `from:`/`to:`: `change_column_default :users, :status,
-    # from: nil, to: "active"` would yield phantom tables.
-    KEYWORD_TABLE_PATTERN = /\b(?:table|to_table|from_table):\s*[:"']?(\w+)/
+    # from: nil, to: "active"` would yield phantom tables. Only a quoted value
+    # may carry a schema, so `table: apples.to_s` still reads as `apples`.
+    KEYWORD_TABLE_PATTERN = /\b(?:table|to_table|from_table):\s*(?:["'](#{QUALIFIED_NAME})|:?(\w+))/
+
+    # Postgres resolves a bare name to this schema, so the prefix says nothing.
+    DEFAULT_SCHEMA_PREFIX = "public."
 
     # Ruby `#` comments up to end of line, but not `#{}` interpolation.
     COMMENT_PATTERN = /#(?!\{).*/
@@ -75,12 +96,13 @@ module Railbow
 
       tables = []
 
-      content.scan(SINGLE_TABLE_PATTERN) { |match| tables << match[0] }
-      content.scan(DUAL_TABLE_PATTERN) { |match| tables.concat(match) }
+      content.scan(SINGLE_TABLE_PATTERN) { |match| tables.concat(match.compact) }
+      content.scan(DUAL_TABLE_PATTERN) { |match| tables.concat(match.compact) }
       SQL_TABLE_PATTERNS.each do |pattern|
-        content.scan(pattern) { |match| tables << match[0] }
+        content.scan(pattern) { |match| tables << match[0].delete(SQL_QUOTING) }
       end
-      content.scan(KEYWORD_TABLE_PATTERN) { |match| tables << match[0] }
+      content.scan(KEYWORD_TABLE_PATTERN) { |match| tables.concat(match.compact) }
+      tables.map! { |table| table.delete_prefix(DEFAULT_SCHEMA_PREFIX) }
       tables.uniq!
 
       # Model references are a guess (a constant answering these methods need
