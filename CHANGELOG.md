@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-11-24
+
+### Fixed
+
+- A branch tag on a ghost row or a `⎇` branch badge no longer squeezes the
+  migration name to a few letters when the branch name is long. The name now
+  keeps up to 24 columns, and the tag is shortened first, keeping a
+  `<TASK-ID>/` prefix whole (`RAI-6/ghost-ro…`). On a narrow terminal the tag
+  is dropped only when even its shortest form does not fit.
+
 ## [0.8.1] - 2026-11-11
 
 ### Fixed
