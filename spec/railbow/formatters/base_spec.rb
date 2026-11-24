@@ -157,11 +157,18 @@ RSpec.describe Railbow::Formatters::Base do
       expect(plain(result)).to include("⎇ PS-2569")
     end
 
-    it "drops the tags when keeping them would leave no room for the name" do
+    it "shortens the tags when keeping them whole would leave no room for the name" do
       wide = cell("Readd goal tracking widgets", formatter.diff_tag_branch("feature/quite-a-long-branch"))
       result = formatter.name_with_tags_fitted(wide, 34)
 
-      expect(plain(result)).to eq("Readd goal tracking widgets")
+      expect(plain(result)).to eq("Readd goa...  ⎇ feature/quite-a-l…")
+    end
+
+    it "drops the tags when even their shortest form leaves no room for the name" do
+      wide = cell("Readd goal tracking widgets", formatter.diff_tag_branch("feature/quite-a-long-branch"))
+      result = formatter.name_with_tags_fitted(wide, 16)
+
+      expect(plain(result)).to eq("Readd goal tr...")
     end
 
     it "falls back to plain truncation for an untagged name" do
@@ -172,9 +179,73 @@ RSpec.describe Railbow::Formatters::Base do
 
     it "never renders wider than the width it was given" do
       [60, 44, 34, 24, 16].each do |width|
-        result = formatter.name_with_tags_fitted(tagged, width)
-        expect(formatter.display_width(plain(result))).to be <= width
+        [tagged, ghost_cell].each do |c|
+          result = formatter.name_with_tags_fitted(c, width)
+          expect(formatter.display_width(plain(result))).to be <= width
+        end
       end
+    end
+
+    # A ghost row from a <TASK-ID>/<slug> branch, as Section#with_tags builds it
+    # in a 60 wide column. Ghost tags end in the ghost foreground, not a reset.
+    let(:ghost_fg) { "\e[38;5;217m" }
+    let(:ghost_tag) { "\e[38;5;222m⌥ AP-4421/apple-crates-lose-their-labels-when#{ghost_fg}" }
+    let(:ghost_cell) { cell("Add Apple...", ghost_tag) }
+
+    [52, 45].each do |width|
+      it "shortens a long branch tag at #{width} instead of dropping it" do
+        result = formatter.name_with_tags_fitted(ghost_cell, width)
+
+        expect(plain(result)).to start_with("Add Apple...")
+        expect(plain(result)).to include("⌥ AP-4421/apple")
+        expect(plain(result)).to end_with("…")
+        expect(formatter.display_width(plain(result))).to be <= width
+        expect(result).to end_with(ghost_fg)
+      end
+    end
+  end
+
+  describe "#fit_tags" do
+    def plain(str) = formatter.strip_ansi(str)
+
+    let(:landed) { formatter.landed_tag(Date.new(2026, 8, 8)) }
+
+    it "returns tags that fit untouched" do
+      tag = formatter.diff_tag_branch("PS-2569")
+
+      expect(formatter.fit_tags(tag, 20)).to eq(tag)
+    end
+
+    it "keeps a task-id prefix and ellipsizes the slug" do
+      tag = formatter.diff_tag_branch("AP-4421/apple-crates-lose-their-labels")
+      result = formatter.fit_tags(tag, 20)
+
+      expect(plain(result)).to eq("⎇ AP-4421/apple-cra…")
+      expect(result).to end_with(described_class::RESET)
+    end
+
+    it "never cuts into the task-id prefix" do
+      tag = formatter.diff_tag_branch("AP-4421/apple-crates-lose-their-labels")
+
+      expect(plain(formatter.fit_tags(tag, 11))).to eq("⎇ AP-4421/…")
+      expect(formatter.fit_tags(tag, 10)).to be_nil
+    end
+
+    it "cuts a label with no task id from the right" do
+      tag = formatter.diff_tag_branch("feature/quite-a-long-branch")
+
+      expect(plain(formatter.fit_tags(tag, 12))).to eq("⎇ feature/q…")
+    end
+
+    it "drops the landed badge before shortening the branch past its prefix" do
+      tags = [landed, formatter.diff_tag_branch("AP-4421/apple-crates")].join(" ")
+
+      expect(plain(formatter.fit_tags(tags, 22))).to eq("↪ Aug 08 ⎇ AP-4421/ap…")
+      expect(plain(formatter.fit_tags(tags, 14))).to eq("⎇ AP-4421/app…")
+    end
+
+    it "returns nil when even the shortest form does not fit" do
+      expect(formatter.fit_tags(formatter.diff_tag_branch("bananas"), 3)).to be_nil
     end
   end
 end

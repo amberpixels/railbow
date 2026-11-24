@@ -29,6 +29,10 @@ module Railbow
       # terminal, before it starts dropping columns instead.
       NAME_COL_MIN_WIDTH = 24
 
+      # Share of a capped name column the name keeps before its tags are
+      # shortened, so a long branch tag cannot squeeze it to a few letters.
+      TAGGED_NAME_MIN = 24
+
       NO_FILE = "NO FILE"
 
       # A version one database in a shard group has and another does not.
@@ -532,6 +536,12 @@ module Railbow
         return "#{name}  #{tags}" unless @name_col_width
 
         tags_width = formatter.display_width(formatter.strip_ansi(tags))
+        name_keep = [formatter.display_width(formatter.strip_ansi(name)), TAGGED_NAME_MIN].min
+        tag_room = @name_col_width - name_keep - 2
+        if tags_width > tag_room && (fitted = formatter.fit_tags(tags, tag_room))
+          tags = fitted
+          tags_width = formatter.display_width(formatter.strip_ansi(tags))
+        end
         name = formatter.truncate_str(name, @name_col_width - tags_width - 2)
         name_width = formatter.display_width(strip ? formatter.strip_ansi(name) : name)
         padding = @name_col_width - name_width - tags_width

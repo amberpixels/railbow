@@ -38,6 +38,14 @@ module Railbow
       # Narrowest name a tagged cell will accept before the tags are dropped.
       NAME_TAGS_FLOOR = 12
 
+      # One tag: its color, a glyph (plus a worktree mark or a space), a label,
+      # and its closing code (a reset, or the ghost foreground on a ghost row).
+      TAG_PARTS = /\A(\e\[[\d;]*m)(.ₜ?\s?)([^\e]*)(\e\[[\d;]*m)\z/
+      TAG_RUN = /\e\[[\d;]*m[^\e]*\e\[[\d;]*m/
+
+      # A branch named <TASK-ID>/<slug>: the id is what identifies the work.
+      TASK_ID_PREFIX = /\A[A-Z][A-Z0-9]*-\d+\//
+
       def dim(str) = "#{DIM}#{str}#{RESET}"
       def green(str) = "#{GREEN}#{str}#{RESET}"
       def yellow(str) = "#{YELLOW}#{str}#{RESET}"
@@ -113,8 +121,9 @@ module Railbow
 
       # Re-fits a Migration Name cell whose tags (branch, landed) sit flush
       # right. Cutting from the right would eat the tags and leave a bare
-      # ellipsis, so the name gives up the space instead. Below NAME_TAGS_FLOOR
-      # the tags go: the name is what the row is about.
+      # ellipsis, so the name gives up the space instead, down to
+      # NAME_TAGS_FLOOR. Past that the tags are shortened, and dropped only
+      # when even their shortest form does not fit.
       def name_with_tags_fitted(cell, max_width)
         str = cell.to_s
         return truncate_ansi(str, max_width) if display_width(strip_ansi(str)) <= max_width
@@ -128,11 +137,40 @@ module Railbow
         tags = str[split..].lstrip
         tags_width = display_width(strip_ansi(tags))
         name_room = max_width - tags_width - 2
-        return truncate_ansi(name, max_width) if name_room < NAME_TAGS_FLOOR
+        if name_room < NAME_TAGS_FLOOR
+          name_keep = [display_width(strip_ansi(name)), NAME_TAGS_FLOOR].min
+          tags = fit_tags(tags, max_width - name_keep - 2)
+          return truncate_ansi(name, max_width) unless tags
+
+          tags_width = display_width(strip_ansi(tags))
+          name_room = max_width - tags_width - 2
+        end
 
         name = truncate_ansi(name, name_room)
         padding = max_width - display_width(strip_ansi(name)) - tags_width
         "#{name}#{" " * [padding, 2].max}#{tags}"
+      end
+
+      # Re-fits a space-joined run of tags within max_width, or nil when even
+      # the shortest form does not fit. The last tag carries the free-form
+      # label (branch, merge source), so it is shortened; tags before it are
+      # dropped from the left once it is at its shortest.
+      def fit_tags(tags, max_width)
+        str = tags.to_s
+        return str if display_width(strip_ansi(str)) <= max_width
+
+        segments = str.scan(TAG_RUN)
+        return nil unless segments.join(" ") == str
+
+        *rest, last = segments
+        loop do
+          rest_width = rest.empty? ? 0 : display_width(strip_ansi(rest.join(" "))) + 1
+          fitted = shorten_tag(last, max_width - rest_width)
+          return [*rest, fitted].join(" ") if fitted
+          return nil if rest.empty?
+
+          rest.shift
+        end
       end
 
       def format_timing(seconds)
@@ -197,6 +235,28 @@ module Railbow
         elsif years < 1 then "~#{months}mo ago"
         else "~#{years}y ago"
         end
+      end
+
+      private
+
+      # Cuts one tag's label to fit max_width, keeping a task-id prefix whole,
+      # and rebuilds it from its own codes: truncate_ansi would close it with a
+      # reset and end a ghost row's foreground at the tag.
+      def shorten_tag(tag, max_width)
+        lead, glyph, label, close = tag.match(TAG_PARTS)&.captures
+        return nil unless lead
+        return tag if display_width(glyph + label) <= max_width
+
+        label_room = max_width - display_width(glyph) - 1
+        keep = label[TASK_ID_PREFIX] || label[0].to_s
+        return nil if label.empty? || label_room < display_width(keep)
+
+        cut = +""
+        label.each_char do |ch|
+          break if display_width(cut + ch) > label_room
+          cut << ch
+        end
+        "#{lead}#{glyph}#{cut}…#{close}"
       end
     end
   end
