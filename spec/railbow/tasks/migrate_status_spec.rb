@@ -81,6 +81,18 @@ RSpec.describe Railbow::MigrateStatusFormatter do
       expect(second).not_to include("⌥")
     end
 
+    it "keeps a long branch tag on a ghost, shortened, beside a readable name" do
+      allow(Mighost::API).to receive(:orphaned_migrations).and_return([
+        orphan(version: "20260101000001",
+          filename: "20260101000001_add_harvest_stamps_to_apple_crates.rb",
+          branch_name: "AP-4421/apple-crates-lose-their-labels-when")
+      ])
+
+      line = render_status.lines.find { |l| l.include?("Add Harvest") }
+      expect(line).to include("⌥ AP-4421/apple")
+      expect(line).to include("Add Harvest Stamps To")
+    end
+
     it "renders a superseded ghost with the calm glyph and successor badge" do
       allow(Mighost::API).to receive(:orphaned_migrations).and_return([
         orphan(version: "20260101000001", filename: "20260101000001_add_apples.rb",
