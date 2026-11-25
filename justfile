@@ -6,6 +6,13 @@ lint:
 fmt:
     bundle exec standardrb --fix
 
+# Build the gem at the current VERSION into pkg/ and push it to RubyGems.
+# Run it after the "Prepare vX.Y.Z" commit; it also tags and pushes git,
+# skipping the tag when it is already there.
+[doc("Build and publish the gem to RubyGems")]
+gem:
+    bundle exec rake release
+
 # Screenshot a command's output in a Rails app that loads this railbow
 # checkout: one PNG of everything it prints, saved under tmp/shots/. The app
 # comes from $RBW_APP, or the second argument. Needs freeze.
